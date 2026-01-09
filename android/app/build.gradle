@@ -105,6 +105,9 @@ android {
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
     }
+    packagingOptions {
+        pickFirst '**/libc++_shared.so'  // ✅ ADD THIS
+  }
 }
 
 dependencies {
