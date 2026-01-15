@@ -1,3 +1,4 @@
+// utils/formatters.ts
 export function formatINR(amount: number | string): string {
   const n =
     typeof amount === "string"

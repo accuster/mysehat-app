@@ -1,3 +1,4 @@
+// components/navigation/AppNavigator.tsx
 import React from 'react';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -18,6 +19,7 @@ import PaymentSuccessScreen from '../screens/user/PaymentSuccessScreen';
 import InstantReport, { ReportData } from '../screens/user/InstantReport';
 import ManageMembersScreen from '../screens/user/ManageMembersScreen';
 import WalletScreen from '../screens/user/WalletScreen'; // ✅ ADD THIS
+import ProfileScreen from '../screens/user/ProfileScreen';
 
 import FloatingBottomNav from '../FloatingBottomNav';
 import { COLORS } from '../../theme/colors';
@@ -50,6 +52,7 @@ export type AppStackParamList = {
   Wallet: undefined; // ✅ ADD THIS
   Support: undefined;
   ManageMembers: undefined;
+  Profile: undefined;
   SelectUser: {
     qrData: any;
     rawData: string;
@@ -110,6 +113,7 @@ function AppStackNavigator() {
       <AppStack.Screen name="Wallet" component={WalletScreen} />
       <AppStack.Screen name="Support" component={SupportScreen} />
       <AppStack.Screen name="ManageMembers" component={ManageMembersScreen} />
+      <AppStack.Screen name="Profile" component={ProfileScreen} />
       <AppStack.Screen 
         name="SelectUser" 
         component={SelectUserContainer}

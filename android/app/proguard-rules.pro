@@ -8,3 +8,12 @@
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
 # Add any project specific keep options here:
+
+# ---------- PDFBox / HTML-to-PDF ----------
+-keep class com.tom_roush.pdfbox.** { *; }
+-dontwarn com.tom_roush.pdfbox.**
+
+# ---------- JPEG2000 (JPX) decoder ----------
+-keep class com.gemalto.jp2.** { *; }
+-dontwarn com.gemalto.jp2.**
+

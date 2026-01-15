@@ -1,3 +1,4 @@
+// components/screens/user/WalletScreen.tsx
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable react-native/no-inline-styles */
 import React, { useMemo, useState } from 'react';

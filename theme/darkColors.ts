@@ -1,4 +1,4 @@
-
+// theme/darkColors.ts
 export const darkColors = {
   background: '#0A0A0A',
   surface: '#111111',

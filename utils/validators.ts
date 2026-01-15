@@ -1,3 +1,4 @@
+// utils/validators.ts
 export function isValidIndianMobile(phone: string): boolean {
   const digits = phone.replace(/[^\d]/g, "");
   // accepts 10 digits (optionally starting with 0 or 91 in raw input)

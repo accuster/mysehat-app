@@ -1,3 +1,4 @@
+// components/common/AppHeader.tsx
 import React from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { Menu } from 'lucide-react-native';

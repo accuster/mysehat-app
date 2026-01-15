@@ -1,3 +1,4 @@
+// components/screens/user/SupportScreen.tsx
 import React, { useState } from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';

@@ -1,3 +1,4 @@
+// theme/colors.ts
 export const COLORS = {
   bg: "#0F172A",
   card: "#1E293B",

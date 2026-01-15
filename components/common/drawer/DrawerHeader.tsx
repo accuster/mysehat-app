@@ -1,19 +1,17 @@
-import React, { useEffect, useState } from 'react';
+// components/common/drawer/DrawerHeader.tsx
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Pressable,
-  ActivityIndicator,
 } from 'react-native';
-import { X } from 'lucide-react-native';
+import { X, Phone } from 'lucide-react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../../store';
 import { fetchMembers } from '../../../store/slices/memberSlice';
-import { authApi } from '../../../store/services/authApi';
 
 type Props = {
-  credits: number; // ✅ Keep this prop
   onClose: () => void;
 };
 
@@ -22,40 +20,12 @@ export default function DrawerHeader({ onClose }: Props) {
   const { members } = useSelector((state: RootState) => state.members);
   const { user } = useSelector((state: RootState) => state.auth);
 
-  const [credits, setCredits] = useState<number>(0);
-  const [loadingCredits, setLoadingCredits] = useState(false);
-
   // Fetch members if not loaded
   useEffect(() => {
     if (members.length === 0) {
       dispatch(fetchMembers());
     }
   }, [dispatch, members.length]);
-
-  // Fetch wallet credits
-  useEffect(() => {
-    const fetchCredits = async () => {
-      if (!user?.mobile) return;
-
-      try {
-        setLoadingCredits(true);
-        // You'll need to add this endpoint to your authApi.ts
-        // For now, using placeholder - replace with actual API call
-        // const walletInfo = await authApi.getWalletInfo();
-        // setCredits(walletInfo.balance);
-
-        // Placeholder until you add the API endpoint
-        setCredits(50);
-      } catch (error) {
-        console.error('Error fetching credits:', error);
-        setCredits(0);
-      } finally {
-        setLoadingCredits(false);
-      }
-    };
-
-    fetchCredits();
-  }, [user?.mobile]);
 
   // Get SuperUser from members
   const superUser = members.find(member => member.userType === 'SuperUser');
@@ -74,17 +44,16 @@ export default function DrawerHeader({ onClose }: Props) {
     ? getFirstName(user.name)
     : 'User';
 
+  // Get mobile number from user
+  const userMobile = user?.mobile || 'N/A';
+
   return (
     <View style={styles.container}>
       <View>
         <Text style={styles.name}>Hi, {displayName}</Text>
-        <View style={styles.creditsRow}>
-          <Text style={styles.credits}>Credits: </Text>
-          {loadingCredits ? (
-            <ActivityIndicator size="small" color="#94A3B8" />
-          ) : (
-            <Text style={styles.creditsValue}>{credits}</Text>
-          )}
+        <View style={styles.mobileRow}>
+          <Phone size={12} color="#7C3AED" strokeWidth={2.5} />
+          <Text style={styles.mobileValue}>{userMobile}</Text>
         </View>
       </View>
 
@@ -111,16 +80,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-  creditsRow: {
+  mobileRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 4,
+    gap: 6,
   },
-  credits: {
-    color: '#94A3B8',
-    fontSize: 12,
-  },
-  creditsValue: {
+  mobileValue: {
     color: '#7C3AED',
     fontSize: 12,
     fontWeight: '700',

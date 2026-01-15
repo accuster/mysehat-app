@@ -17,6 +17,7 @@ import PayScreen from '../screens/user/PayScreen';
 import PaymentSuccessScreen from '../screens/user/PaymentSuccessScreen';
 import InstantReport, { ReportData } from '../screens/user/InstantReport';
 import ManageMembersScreen from '../screens/user/ManageMembersScreen';
+import WalletScreen from '../screens/user/WalletScreen'; // ✅ ADD THIS
 
 import FloatingBottomNav from '../FloatingBottomNav';
 import { COLORS } from '../../theme/colors';
@@ -39,13 +40,14 @@ export type AuthStackParamList = {
 
 export type AppTabParamList = {
   MySehat: undefined;
-  Transactions: undefined;
-  Reports: undefined;
   QR: undefined;
 };
 
 export type AppStackParamList = {
   Tabs: undefined;
+  Reports: undefined;
+  Transactions: undefined;
+  Wallet: undefined; // ✅ ADD THIS
   Support: undefined;
   ManageMembers: undefined;
   SelectUser: {
@@ -94,8 +96,6 @@ function AppTabNavigator() {
   return (
     <AppTab.Navigator screenOptions={{ headerShown: false }} tabBar={FloatingBottomNav}>
       <AppTab.Screen name="MySehat" component={HomeScreen} />
-      <AppTab.Screen name="Reports" component={ReportsScreen} />
-      <AppTab.Screen name="Transactions" component={TransactionsScreen} />
       <AppTab.Screen name="QR" component={ScanScreen} />
     </AppTab.Navigator>
   );
@@ -105,6 +105,9 @@ function AppStackNavigator() {
   return (
     <AppStack.Navigator screenOptions={{ headerShown: false }}>
       <AppStack.Screen name="Tabs" component={AppTabNavigator} />
+      <AppStack.Screen name="Reports" component={ReportsScreen} />
+      <AppStack.Screen name="Transactions" component={TransactionsScreen} />
+      <AppStack.Screen name="Wallet" component={WalletScreen} />
       <AppStack.Screen name="Support" component={SupportScreen} />
       <AppStack.Screen name="ManageMembers" component={ManageMembersScreen} />
       <AppStack.Screen 

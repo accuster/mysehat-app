@@ -1,5 +1,5 @@
+// components/screens/user/InstantReport.tsx
 import React, { useMemo, useState } from 'react';
-// ✅ Import useSafeAreaInsets
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View,

@@ -1,3 +1,4 @@
+// components/screens/auth/LoginScreen copy.tsx
 /* eslint-disable no-catch-shadow */
 /* eslint-disable @typescript-eslint/no-shadow */
 /* eslint-disable react-native/no-inline-styles */
@@ -77,10 +78,10 @@ export default function LoginScreen({ navigation }: Props) {
     }
   }, [resendTimer]);
 
-  // Handle Redux errors
+  // Handle Redux errors - don't show alert, just log them
   useEffect(() => {
     if (error) {
-      Alert.alert('Error', error);
+      console.warn('Redux error:', error);
       dispatch(clearError());
     }
   }, [error, dispatch]);
@@ -199,7 +200,7 @@ export default function LoginScreen({ navigation }: Props) {
     try {
       // ✅ Use the HEX reqId directly - DO NOT decode it
       const verifyData = {
-        reqId: reqId,  // Send HEX string as-is
+        reqId: reqId,
         otp: otp,
       };
       
@@ -211,9 +212,8 @@ export default function LoginScreen({ navigation }: Props) {
       console.log('✅ Verify response:', verifyResponse);
       
       if (verifyResponse.type === 'success') {
-        // ✅ MSG91 returns the JWT access token in the 'message' field
         const accessToken = 
-          verifyResponse.message ||           // ← Access token is HERE!
+          verifyResponse.message ||
           verifyResponse.accessToken || 
           verifyResponse['access-token'] ||
           verifyResponse.data?.accessToken ||
@@ -223,14 +223,14 @@ export default function LoginScreen({ navigation }: Props) {
         console.log('Token (first 50 chars):', accessToken ? accessToken.substring(0, 50) + '...' : 'none');
         
         if (!accessToken) {
-          throw new Error('No access token received from MSG91');
+          setOtpError('No access token received. Please try again.');
+          return;
         }
         
         console.log('🔑 Sending token to backend for login...');
         
-        // Verify login with your backend
         const resultAction = await dispatch(verifyLogin({
-          accessToken: accessToken,  // Use the JWT token from MSG91
+          accessToken: accessToken,
           mobile: phone,
         }));
         
@@ -247,23 +247,29 @@ export default function LoginScreen({ navigation }: Props) {
             navigation.replace('App');
           }
         } else {
-          throw new Error('Login verification failed');
+          setOtpError('Login failed. Please try again.');
         }
       } else {
-        // Handle MSG91 error codes
-        let errorMsg = 'Invalid OTP. Please try again.';
-        
+        // Handle MSG91 error codes - show friendly messages
         if (verifyResponse.code === 708) {
-          errorMsg = 'Invalid OTP or session expired. Please request a new OTP.';
-        } else if (verifyResponse.message) {
-          errorMsg = verifyResponse.message;
+          setOtpError('OTP session expired. Please request a new OTP.');
+        } else if (verifyResponse.message && verifyResponse.message.toLowerCase().includes('invalid')) {
+          setOtpError('Invalid OTP. Please check and try again.');
+        } else {
+          setOtpError(verifyResponse.message || 'Verification failed. Please try again.');
         }
-        
-        throw new Error(errorMsg);
       }
     } catch (error: any) {
       console.error('❌ Verify OTP error:', error);
-      setOtpError(error.message || 'Invalid OTP. Please try again.');
+      
+      // Show user-friendly error message
+      if (error.message && error.message.toLowerCase().includes('invalid')) {
+        setOtpError('Invalid OTP. Please check and try again.');
+      } else if (error.message && error.message.toLowerCase().includes('expired')) {
+        setOtpError('OTP expired. Please request a new one.');
+      } else {
+        setOtpError('Verification failed. Please try again.');
+      }
     }
   };
 

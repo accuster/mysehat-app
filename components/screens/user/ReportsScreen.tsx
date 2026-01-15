@@ -1,3 +1,4 @@
+// components/screens/user/ReportsScreen.tsx
 /* eslint-disable react-native/no-inline-styles */
 import React, { useState, useEffect } from 'react';
 import {
@@ -9,21 +10,45 @@ import {
   ActivityIndicator,
   RefreshControl,
   Pressable,
+  TextInput,
+  Modal,
+  ScrollView,
+  Platform,
 } from 'react-native';
-// ✅ STEP 1: Import useSafeAreaInsets
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft } from 'lucide-react-native';
+import { 
+  ArrowLeft, 
+  FileText, 
+  Search, 
+  SlidersHorizontal, 
+  X, 
+  Calendar,
+  Scale,
+  BarChart3,
+  Heart
+} from 'lucide-react-native';
 import { useAppDispatch, useAppSelector } from '../../../store/hook';
 import { fetchReports } from '../../../store/slices/reportSlice';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 type Props = {
   navigation: any;
 };
 
+type FilterOptions = {
+  dateRange: 'all' | 'today' | 'week' | 'month' | 'year' | 'custom';
+  startDate: Date | null;
+  endDate: Date | null;
+  bmiType: 'all' | 'Underweight' | 'Normal' | 'Overweight' | 'Obese';
+  bmiValueMin: string;
+  bmiValueMax: string;
+  healthScoreOperator: 'all' | 'greater' | 'less';
+  healthScoreValue: '25' | '50' | '75' | '100';
+};
+
 export default function ReportsScreen({ navigation }: Props) {
   const dispatch = useAppDispatch();
   
-  // ✅ STEP 2: Add safe area hook and calculate dynamic padding
   const insets = useSafeAreaInsets();
   const contentBottomPadding = 20 + (insets.bottom > 0 ? insets.bottom : 0);
   
@@ -32,12 +57,132 @@ export default function ReportsScreen({ navigation }: Props) {
   
   // Local state
   const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredReports, setFilteredReports] = useState(reports);
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  
+  // Date picker states
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  
+  // Filter state
+  const [filters, setFilters] = useState<FilterOptions>({
+    dateRange: 'all',
+    startDate: null,
+    endDate: null,
+    bmiType: 'all',
+    bmiValueMin: '',
+    bmiValueMax: '',
+    healthScoreOperator: 'all',
+    healthScoreValue: '50',
+  });
+
+  const [activeFiltersCount, setActiveFiltersCount] = useState(0);
 
   // Fetch reports on mount
   useEffect(() => {
     console.log('📊 ReportsScreen: Component mounted');
     dispatch(fetchReports());
   }, [dispatch]);
+
+  // Apply filters and search
+  useEffect(() => {
+    let filtered = [...reports];
+
+    // Apply search filter
+    if (searchQuery.trim() !== '') {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter((report) => {
+        return (
+          report.user_name.toLowerCase().includes(query) ||
+          report.report_id.toLowerCase().includes(query) ||
+          report.vitals.bmi_status.toLowerCase().includes(query)
+        );
+      });
+    }
+
+    // Apply date filter
+    if (filters.dateRange === 'custom' && (filters.startDate || filters.endDate)) {
+      filtered = filtered.filter((report) => {
+        const reportDate = new Date(report.report_date);
+        reportDate.setHours(0, 0, 0, 0);
+        
+        if (filters.startDate && filters.endDate) {
+          const start = new Date(filters.startDate);
+          start.setHours(0, 0, 0, 0);
+          const end = new Date(filters.endDate);
+          end.setHours(23, 59, 59, 999);
+          return reportDate >= start && reportDate <= end;
+        } else if (filters.startDate) {
+          const start = new Date(filters.startDate);
+          start.setHours(0, 0, 0, 0);
+          return reportDate >= start;
+        } else if (filters.endDate) {
+          const end = new Date(filters.endDate);
+          end.setHours(23, 59, 59, 999);
+          return reportDate <= end;
+        }
+        return true;
+      });
+    } else if (filters.dateRange !== 'all' && filters.dateRange !== 'custom') {
+      const now = new Date();
+      filtered = filtered.filter((report) => {
+        const reportDate = new Date(report.report_date);
+        
+        switch (filters.dateRange) {
+          case 'today':
+            return reportDate.toDateString() === now.toDateString();
+          case 'week':
+            const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            return reportDate >= weekAgo;
+          case 'month':
+            const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            return reportDate >= monthAgo;
+          case 'year':
+            const yearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+            return reportDate >= yearAgo;
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Apply BMI type filter
+    if (filters.bmiType !== 'all') {
+      filtered = filtered.filter((report) => report.vitals.bmi_status === filters.bmiType);
+    }
+
+    // Apply BMI value range filter
+    if (filters.bmiValueMin !== '' || filters.bmiValueMax !== '') {
+      filtered = filtered.filter((report) => {
+        const bmi = report.vitals.bmi;
+        const min = filters.bmiValueMin !== '' ? parseFloat(filters.bmiValueMin) : 0;
+        const max = filters.bmiValueMax !== '' ? parseFloat(filters.bmiValueMax) : 999;
+        return bmi >= min && bmi <= max;
+      });
+    }
+
+    // Apply health score filter
+    if (filters.healthScoreOperator !== 'all') {
+      const targetScore = parseInt(filters.healthScoreValue);
+      filtered = filtered.filter((report) => {
+        const score = report.vitals.health_score;
+        return filters.healthScoreOperator === 'greater' 
+          ? score >= targetScore 
+          : score < targetScore;
+      });
+    }
+
+    setFilteredReports(filtered);
+
+    // Count active filters
+    let count = 0;
+    if (filters.dateRange !== 'all') count++;
+    if (filters.bmiType !== 'all') count++;
+    if (filters.bmiValueMin !== '' || filters.bmiValueMax !== '') count++;
+    if (filters.healthScoreOperator !== 'all') count++;
+    setActiveFiltersCount(count);
+  }, [searchQuery, reports, filters]);
 
   // Handle pull-to-refresh
   const onRefresh = async () => {
@@ -52,11 +197,60 @@ export default function ReportsScreen({ navigation }: Props) {
     navigation.goBack();
   };
 
+  // Handle filter button press
+  const handleFilter = () => {
+    setShowFilterModal(true);
+  };
+
+  // Handle date range change
+  const handleDateRangeChange = (value: any) => {
+    setFilters({ 
+      ...filters, 
+      dateRange: value,
+      startDate: value === 'custom' ? filters.startDate : null,
+      endDate: value === 'custom' ? filters.endDate : null,
+    });
+  };
+
+  // Handle start date change
+  const handleStartDateChange = (event: any, selectedDate?: Date) => {
+    setShowStartDatePicker(Platform.OS === 'ios');
+    if (selectedDate) {
+      setFilters({ ...filters, startDate: selectedDate, dateRange: 'custom' });
+    }
+  };
+
+  // Handle end date change
+  const handleEndDateChange = (event: any, selectedDate?: Date) => {
+    setShowEndDatePicker(Platform.OS === 'ios');
+    if (selectedDate) {
+      setFilters({ ...filters, endDate: selectedDate, dateRange: 'custom' });
+    }
+  };
+
+  // Reset filters
+  const handleResetFilters = () => {
+    setFilters({
+      dateRange: 'all',
+      startDate: null,
+      endDate: null,
+      bmiType: 'all',
+      bmiValueMin: '',
+      bmiValueMax: '',
+      healthScoreOperator: 'all',
+      healthScoreValue: '50',
+    });
+  };
+
+  // Apply filters and close modal
+  const handleApplyFilters = () => {
+    setShowFilterModal(false);
+  };
+
   // Handle download - Navigate to InstantReport
   const handleDownload = (item: any) => {
     console.log('📥 Opening report:', item.report_id);
     
-    // Format data for InstantReport screen
     const reportData = {
       timestamp: formatDate(item.report_date) + ' ' + formatTime(item.report_date),
       reportId: item.report_id,
@@ -74,7 +268,6 @@ export default function ReportsScreen({ navigation }: Props) {
       healthScore: item.vitals.health_score,
     };
     
-    // Navigate to InstantReport screen
     navigation.navigate('Report', { data: reportData });
   };
 
@@ -98,22 +291,30 @@ export default function ReportsScreen({ navigation }: Props) {
     });
   };
 
+  // Format date for date picker display
+  const formatDateForPicker = (date: Date | null) => {
+    if (!date) return 'Select Date';
+    return date.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  };
+
   // Render loading state
   if (isLoading && reports.length === 0) {
     return (
-      // ✅ STEP 3: Change edges to ['top', 'bottom']
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        {/* Simple Header with Back Button */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <ArrowLeft size={24} color="#fff" />
+            <ArrowLeft size={24} color="#FAFAFA" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Medical Reports</Text>
           <View style={styles.placeholder} />
         </View>
 
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#F97316" />
+          <ActivityIndicator size="large" color="#F59E0B" />
           <Text style={styles.loadingText}>Loading reports...</Text>
         </View>
       </SafeAreaView>
@@ -123,12 +324,10 @@ export default function ReportsScreen({ navigation }: Props) {
   // Render error state
   if (error && reports.length === 0) {
     return (
-      // ✅ STEP 3: Change edges to ['top', 'bottom']
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        {/* Simple Header with Back Button */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <ArrowLeft size={24} color="#fff" />
+            <ArrowLeft size={24} color="#FAFAFA" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Medical Reports</Text>
           <View style={styles.placeholder} />
@@ -150,12 +349,10 @@ export default function ReportsScreen({ navigation }: Props) {
   // Render empty state
   if (reports.length === 0) {
     return (
-      // ✅ STEP 3: Change edges to ['top', 'bottom']
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        {/* Simple Header with Back Button */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <ArrowLeft size={24} color="#fff" />
+            <ArrowLeft size={24} color="#FAFAFA" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Medical Reports</Text>
           <View style={styles.placeholder} />
@@ -172,72 +369,372 @@ export default function ReportsScreen({ navigation }: Props) {
   }
 
   return (
-    // ✅ STEP 3: Change edges to ['top', 'bottom']
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Simple Header with Back Button */}
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <ArrowLeft size={24} color="#fff" />
+          <ArrowLeft size={24} color="#FAFAFA" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Medical Reports</Text>
         <View style={styles.placeholder} />
       </View>
 
+      {/* Search Bar and Filter Section */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+          <Search size={20} color="#71717A" strokeWidth={2.5} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search by name, ID, or status..."
+            placeholderTextColor="#71717A"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Text style={styles.clearText}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <TouchableOpacity style={styles.filterBtn} onPress={handleFilter}>
+          <SlidersHorizontal size={20} color="#FAFAFA" strokeWidth={2.5} />
+          {activeFiltersCount > 0 && (
+            <View style={styles.filterBadge}>
+              <Text style={styles.filterBadgeText}>{activeFiltersCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
+
       {/* Content */}
       <View style={styles.content}>
-        <FlatList
-          data={reports}
-          keyExtractor={item => item.report_id}
-          // ✅ STEP 4: Use dynamic padding instead of hardcoded 20
-          contentContainerStyle={{ paddingBottom: contentBottomPadding }}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor="#F97316"
-              colors={['#F97316']}
-            />
-          }
-          renderItem={({ item }) => {
-            const bmiColor = 
-              item.vitals.bmi_status === 'Normal' ? '#22C55E' :
-              item.vitals.bmi_status === 'Underweight' ? '#3B82F6' :
-              item.vitals.bmi_status === 'Overweight' ? '#FB923C' :
-              '#EF4444'; // Obese
+        {filteredReports.length === 0 ? (
+          <View style={styles.noResultsContainer}>
+            <Text style={styles.noResultsText}>No reports found</Text>
+            <Text style={styles.noResultsSubtext}>
+              Try adjusting your search or filters
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={filteredReports}
+            keyExtractor={item => item.report_id}
+            contentContainerStyle={{ paddingBottom: contentBottomPadding }}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor="#F59E0B"
+                colors={['#F59E0B']}
+              />
+            }
+            renderItem={({ item }) => {
+              const bmiColor = 
+                item.vitals.bmi_status === 'Normal' ? '#10B981' :
+                item.vitals.bmi_status === 'Underweight' ? '#3B82F6' :
+                item.vitals.bmi_status === 'Overweight' ? '#F59E0B' :
+                '#EF4444';
 
-            return (
-              <Pressable
-                style={styles.card}
-                onPress={() => handleDownload(item)}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.name}>
-                    {item.user_name}, {item.gender}/{item.age}
-                  </Text>
-                  <Text style={styles.meta}>
-                    H: {item.vitals.height} cm, W: {item.vitals.weight} kg, BMI: {item.vitals.bmi.toFixed(1)} •{' '}
-                    <Text style={{ color: bmiColor }}>
-                      {item.vitals.bmi_status}
-                    </Text>
-                  </Text>
-                  <Text style={styles.date}>
-                    {formatDate(item.report_date)} • {formatTime(item.report_date)}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.downloadBtn}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    handleDownload(item);
-                  }}
+              const bmiIconBg = 
+                item.vitals.bmi_status === 'Normal' ? 'rgba(16, 185, 129, 0.15)' :
+                item.vitals.bmi_status === 'Underweight' ? 'rgba(59, 130, 246, 0.15)' :
+                item.vitals.bmi_status === 'Overweight' ? 'rgba(245, 158, 11, 0.15)' :
+                'rgba(239, 68, 68, 0.15)';
+
+              return (
+                <Pressable
+                  style={styles.card}
+                  onPress={() => handleDownload(item)}
                 >
-                  <Text style={styles.downloadText}>View</Text>
-                </TouchableOpacity>
-              </Pressable>
-            );
-          }}
-        />
+                  <View style={[styles.iconContainer, { backgroundColor: bmiIconBg }]}>
+                    <FileText size={24} color={bmiColor} strokeWidth={2.5} />
+                  </View>
+
+                  <View style={{ flex: 1, marginLeft: 14 }}>
+                    <Text style={styles.name}>
+                      {item.user_name}, {item.gender}/{item.age}
+                    </Text>
+                    <Text style={styles.meta}>
+                      H: {item.vitals.height} cm • W: {item.vitals.weight} kg • BMI: {item.vitals.bmi.toFixed(1)} • <Text style={{ color: bmiColor }}>{item.vitals.bmi_status}</Text>
+                    </Text>
+                    <Text style={styles.date}>
+                      {formatDate(item.report_date)} • {formatTime(item.report_date)}
+                    </Text>
+                    <Text style={styles.reportId}>Report ID: {item.report_id}</Text>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.downloadBtn}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleDownload(item);
+                    }}
+                  >
+                    <Text style={styles.downloadText}>View</Text>
+                  </TouchableOpacity>
+                </Pressable>
+              );
+            }}
+          />
+        )}
       </View>
+
+      {/* Filter Modal */}
+      <Modal
+        visible={showFilterModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowFilterModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filter Reports</Text>
+              <TouchableOpacity onPress={() => setShowFilterModal(false)}>
+                <X size={24} color="#A1A1AA" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              {/* Date Range Filter */}
+              <View style={styles.filterSection}>
+                <View style={styles.filterLabelRow}>
+                  <Calendar size={18} color="#F59E0B" strokeWidth={2.5} />
+                  <Text style={styles.filterLabel}>Date Range</Text>
+                </View>
+                <View style={styles.filterOptions}>
+                  {[
+                    { label: 'All Time', value: 'all' },
+                    { label: 'Today', value: 'today' },
+                    { label: 'Last 7 Days', value: 'week' },
+                    { label: 'Last 30 Days', value: 'month' },
+                    { label: 'Last Year', value: 'year' },
+                    { label: 'Custom Range', value: 'custom' },
+                  ].map((option) => (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[
+                        styles.filterOption,
+                        filters.dateRange === option.value && styles.filterOptionActive,
+                      ]}
+                      onPress={() => handleDateRangeChange(option.value)}
+                    >
+                      <Text
+                        style={[
+                          styles.filterOptionText,
+                          filters.dateRange === option.value && styles.filterOptionTextActive,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* Custom Date Range Pickers */}
+                {filters.dateRange === 'custom' && (
+                  <View style={styles.datePickersContainer}>
+                    <View style={styles.datePickerItem}>
+                      <Text style={styles.datePickerLabel}>Start Date</Text>
+                      <TouchableOpacity
+                        style={styles.datePickerButton}
+                        onPress={() => setShowStartDatePicker(true)}
+                      >
+                        <Calendar size={18} color="#A1A1AA" strokeWidth={2.5} />
+                        <Text style={styles.datePickerButtonText}>
+                          {formatDateForPicker(filters.startDate)}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.datePickerItem}>
+                      <Text style={styles.datePickerLabel}>End Date</Text>
+                      <TouchableOpacity
+                        style={styles.datePickerButton}
+                        onPress={() => setShowEndDatePicker(true)}
+                      >
+                        <Calendar size={18} color="#A1A1AA" strokeWidth={2.5} />
+                        <Text style={styles.datePickerButtonText}>
+                          {formatDateForPicker(filters.endDate)}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              {/* BMI Type Filter */}
+              <View style={styles.filterSection}>
+                <View style={styles.filterLabelRow}>
+                  <Scale size={18} color="#F59E0B" strokeWidth={2.5} />
+                  <Text style={styles.filterLabel}>BMI Category</Text>
+                </View>
+                <View style={styles.filterOptions}>
+                  {[
+                    { label: 'All', value: 'all' },
+                    { label: 'Underweight', value: 'Underweight' },
+                    { label: 'Normal', value: 'Normal' },
+                    { label: 'Overweight', value: 'Overweight' },
+                    { label: 'Obese', value: 'Obese' },
+                  ].map((option) => (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[
+                        styles.filterOption,
+                        filters.bmiType === option.value && styles.filterOptionActive,
+                      ]}
+                      onPress={() => setFilters({ ...filters, bmiType: option.value as any })}
+                    >
+                      <Text
+                        style={[
+                          styles.filterOptionText,
+                          filters.bmiType === option.value && styles.filterOptionTextActive,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* BMI Value Range */}
+              <View style={styles.filterSection}>
+                <View style={styles.filterLabelRow}>
+                  <BarChart3 size={18} color="#F59E0B" strokeWidth={2.5} />
+                  <Text style={styles.filterLabel}>BMI Value Range</Text>
+                </View>
+                <View style={styles.rangeInputs}>
+                  <View style={styles.rangeInputContainer}>
+                    <Text style={styles.rangeInputLabel}>Min</Text>
+                    <TextInput
+                      style={styles.rangeInput}
+                      placeholder="e.g., 18.5"
+                      placeholderTextColor="#71717A"
+                      value={filters.bmiValueMin}
+                      onChangeText={(text) => setFilters({ ...filters, bmiValueMin: text })}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                  <Text style={styles.rangeSeparator}>—</Text>
+                  <View style={styles.rangeInputContainer}>
+                    <Text style={styles.rangeInputLabel}>Max</Text>
+                    <TextInput
+                      style={styles.rangeInput}
+                      placeholder="e.g., 24.9"
+                      placeholderTextColor="#71717A"
+                      value={filters.bmiValueMax}
+                      onChangeText={(text) => setFilters({ ...filters, bmiValueMax: text })}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                </View>
+              </View>
+
+              {/* Health Score Filter */}
+              <View style={styles.filterSection}>
+                <View style={styles.filterLabelRow}>
+                  <Heart size={18} color="#F59E0B" strokeWidth={2.5} />
+                  <Text style={styles.filterLabel}>Health Score</Text>
+                </View>
+                
+                <View style={styles.filterOptions}>
+                  {[
+                    { label: 'All Scores', value: 'all' },
+                    { label: 'Greater Than', value: 'greater' },
+                    { label: 'Less Than', value: 'less' },
+                  ].map((option) => (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[
+                        styles.filterOption,
+                        filters.healthScoreOperator === option.value && styles.filterOptionActive,
+                      ]}
+                      onPress={() => setFilters({ ...filters, healthScoreOperator: option.value as any })}
+                    >
+                      <Text
+                        style={[
+                          styles.filterOptionText,
+                          filters.healthScoreOperator === option.value && styles.filterOptionTextActive,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {filters.healthScoreOperator !== 'all' && (
+                  <View style={[styles.filterOptions, { marginTop: 12 }]}>
+                    {[
+                      { label: '25%', value: '25' },
+                      { label: '50%', value: '50' },
+                      { label: '75%', value: '75' },
+                      { label: '100%', value: '100' },
+                    ].map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[
+                          styles.filterOption,
+                          filters.healthScoreValue === option.value && styles.filterOptionActive,
+                        ]}
+                        onPress={() => setFilters({ ...filters, healthScoreValue: option.value as any })}
+                      >
+                        <Text
+                          style={[
+                            styles.filterOptionText,
+                            filters.healthScoreValue === option.value && styles.filterOptionTextActive,
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.resetBtn}
+                onPress={handleResetFilters}
+              >
+                <Text style={styles.resetBtnText}>Reset</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.applyBtn}
+                onPress={handleApplyFilters}
+              >
+                <Text style={styles.applyBtnText}>Apply Filters</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        {/* Date Pickers */}
+        {showStartDatePicker && (
+          <DateTimePicker
+            value={filters.startDate || new Date()}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={handleStartDateChange}
+            maximumDate={new Date()}
+          />
+        )}
+
+        {showEndDatePicker && (
+          <DateTimePicker
+            value={filters.endDate || new Date()}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={handleEndDateChange}
+            maximumDate={new Date()}
+            minimumDate={filters.startDate || undefined}
+          />
+        )}
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -245,10 +742,9 @@ export default function ReportsScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#0A0A0A',
   },
   
-  // Simple header with back button
   header: {
     height: 56,
     flexDirection: 'row',
@@ -268,10 +764,69 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#fff',
+    color: '#FAFAFA',
   },
   placeholder: {
-    width: 40, // Match back button width for centering
+    width: 40,
+  },
+
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+    backgroundColor: '#0A0A0A',
+  },
+  searchBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#18181B',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 48,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#27272A',
+  },
+  searchInput: {
+    flex: 1,
+    color: '#FAFAFA',
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  clearText: {
+    color: '#71717A',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  filterBtn: {
+    width: 48,
+    height: 48,
+    backgroundColor: '#18181B',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#27272A',
+    position: 'relative',
+  },
+  filterBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#F59E0B',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  filterBadgeText: {
+    color: '#18181B',
+    fontSize: 10,
+    fontWeight: '900',
   },
   
   content: {
@@ -279,7 +834,6 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   
-  // Loading/Error/Empty states
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -287,75 +841,274 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   loadingText: {
-    color: '#94A3B8',
+    color: '#71717A',
     fontSize: 14,
     marginTop: 12,
   },
   errorText: {
     color: '#EF4444',
     fontSize: 16,
+    fontWeight: '600',
     textAlign: 'center',
     marginBottom: 16,
   },
   retryBtn: {
-    backgroundColor: '#F97316',
+    backgroundColor: '#18181B',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#27272A',
   },
   retryText: {
-    color: '#fff',
+    color: '#F59E0B',
     fontWeight: '700',
     fontSize: 14,
   },
   emptyText: {
-    color: '#fff',
+    color: '#FAFAFA',
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 8,
     textAlign: 'center',
   },
   emptySubtext: {
-    color: '#94A3B8',
+    color: '#71717A',
     fontSize: 14,
     textAlign: 'center',
     paddingHorizontal: 40,
   },
+
+  noResultsContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  noResultsText: {
+    color: '#FAFAFA',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  noResultsSubtext: {
+    color: '#71717A',
+    fontSize: 14,
+  },
   
-  // Report card
   card: {
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
-    padding: 14,
+    backgroundColor: '#18181B',
+    borderRadius: 16,
+    padding: 16,
     marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#27272A',
+  },
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   name: {
-    color: '#fff',
+    color: '#FAFAFA',
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  meta: {
+    color: '#A1A1AA',
+    fontSize: 13,
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  date: {
+    color: '#71717A',
+    fontSize: 12,
+    marginTop: 6,
+    fontWeight: '500',
+  },
+  reportId: {
+    color: '#52525B',
+    fontSize: 11,
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  downloadBtn: {
+    backgroundColor: '#18181B',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginLeft: 12,
+    borderWidth: 1,
+    borderColor: '#27272A',
+  },
+  downloadText: {
+    color: '#F59E0B',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+
+  // Filter Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#18181B',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '85%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#27272A',
+  },
+  modalTitle: {
+    color: '#FAFAFA',
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  modalBody: {
+    padding: 20,
+  },
+  filterSection: {
+    marginBottom: 24,
+  },
+  filterLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  filterLabel: {
+    color: '#E5E7EB',
     fontSize: 16,
     fontWeight: '700',
   },
-  meta: {
-    color: '#CBD5E5',
-    fontSize: 13,
-    marginTop: 4,
+  filterOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  date: {
-    color: '#94A3B8',
-    fontSize: 12,
-    marginTop: 6,
+  filterOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#0A0A0A',
+    borderWidth: 1,
+    borderColor: '#27272A',
   },
-  downloadBtn: {
-    backgroundColor: '#F97316',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginLeft: 12,
+  filterOptionActive: {
+    backgroundColor: '#F59E0B',
+    borderColor: '#F59E0B',
   },
-  downloadText: {
-    color: '#fff',
+  filterOptionText: {
+    color: '#A1A1AA',
+    fontSize: 14,
     fontWeight: '700',
-    fontSize: 12,
+  },
+  filterOptionTextActive: {
+    color: '#18181B',
+  },
+
+  datePickersContainer: {
+    marginTop: 16,
+    gap: 12,
+  },
+  datePickerItem: {
+    flex: 1,
+  },
+  datePickerLabel: {
+    color: '#A1A1AA',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  datePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0A0A0A',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#27272A',
+    gap: 10,
+  },
+  datePickerButtonText: {
+    color: '#FAFAFA',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+
+  rangeInputs: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  rangeInputContainer: {
+    flex: 1,
+  },
+  rangeInputLabel: {
+    color: '#A1A1AA',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  rangeInput: {
+    backgroundColor: '#0A0A0A',
+    borderRadius: 12,
+    padding: 14,
+    color: '#FAFAFA',
+    borderWidth: 1,
+    borderColor: '#27272A',
+    fontSize: 15,
+  },
+  rangeSeparator: {
+    color: '#71717A',
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 24,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#27272A',
+  },
+  resetBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#0A0A0A',
+    borderWidth: 1,
+    borderColor: '#27272A',
+    alignItems: 'center',
+  },
+  resetBtnText: {
+    color: '#A1A1AA',
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  applyBtn: {
+    flex: 2,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#F59E0B',
+    alignItems: 'center',
+  },
+  applyBtnText: {
+    color: '#18181B',
+    fontWeight: '800',
+    fontSize: 15,
   },
 });

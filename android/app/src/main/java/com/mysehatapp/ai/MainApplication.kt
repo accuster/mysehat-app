@@ -1,4 +1,4 @@
-package com.mysehatapp
+package com.mysehat.ai
 
 import android.app.Application
 import com.facebook.react.PackageList

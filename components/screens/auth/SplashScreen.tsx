@@ -1,4 +1,4 @@
-// SplashScreen.tsx - WITH REDUX PERSIST AUTH CHECK
+// components/screens/auth/SplashScreen.tsx
 import React, { useEffect } from "react";
 import { View, StyleSheet, StatusBar, Image } from "react-native";
 import { useSelector } from "react-redux";

@@ -1,3 +1,4 @@
+// components/screens/auth/CompleteProfileScreen.tsx
 /* eslint-disable radix */
 /* eslint-disable react-native/no-inline-styles */
 import React, { useState } from 'react';

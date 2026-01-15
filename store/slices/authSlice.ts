@@ -1,5 +1,5 @@
+// store/slices/authSlice.ts
 /* eslint-disable @typescript-eslint/no-unused-vars */
-// store/slices/authSlice.ts - LOGOUT FIX
 import { persistor } from '../index';
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { AuthState, CompleteProfileRequest } from '../../types/auth.types';

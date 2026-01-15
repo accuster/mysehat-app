@@ -1,4 +1,4 @@
-package com.mysehatapp
+package com.mysehat.ai
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

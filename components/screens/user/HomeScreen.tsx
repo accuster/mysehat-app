@@ -1,3 +1,4 @@
+// components/screens/user/HomeScreen.tsx
 /* eslint-disable react-native/no-inline-styles */
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
@@ -14,7 +15,7 @@ import {
   FileText,
   Users,
   Wallet,
-  MessageCircle,
+  MessagesSquare ,
   ArrowLeftRight,
   ChevronRight,
 } from 'lucide-react-native';
@@ -89,7 +90,7 @@ export default function HomeScreen({ navigation }: Props) {
         style={styles.content}
         contentContainerStyle={{ 
           padding: 16, 
-          paddingBottom: scrollBottomPadding // ✅ Dynamic bottom padding
+          paddingBottom: scrollBottomPadding
         }}
       >
         <Text style={styles.sectionTitle}>👋 Hi, {displayName}!</Text>
@@ -101,10 +102,10 @@ export default function HomeScreen({ navigation }: Props) {
         >
           <View style={styles.walletHeader}>
             <View style={styles.walletIconContainer}>
-              <Wallet size={24} color="#8B5CF6" />
+              <Wallet size={24} color="#A78BFA" />
             </View>
             <Text style={styles.walletTitle}>MySehat Cash & Rewards</Text>
-            <ChevronRight size={20} color="#94A3B8" />
+            <ChevronRight size={20} color="#71717A" />
           </View>
 
           <View style={styles.walletDivider} />
@@ -128,28 +129,22 @@ export default function HomeScreen({ navigation }: Props) {
               style={styles.addBalanceBtn}
               onPress={() => navigation.navigate('Wallet')}
             >
-              <Text style={styles.addBalanceText}>Add Balance</Text>
+              <Text style={styles.addBalanceText}>+ Add Balance</Text>
             </Pressable>
           </View>
         </Pressable>
-        <Text
-          style={{
-            fontSize: 20,
-            fontWeight: 'bold',
-            color: 'white',
-            marginBottom: 8,
-          }}
-        >
-          {' '}
-          Quick actions
-        </Text>
+
+        <Text style={styles.quickActionsTitle}>Quick actions</Text>
+
         <View style={styles.grid}>
           {/* Members Card */}
           <Pressable
             style={styles.actionCard}
             onPress={() => navigation.navigate('ManageMembers')}
           >
-            <Users size={32} color="#8B5CF6" />
+            <View style={styles.actionIconContainer}>
+              <Users size={28} color="#8B5CF6" />
+            </View>
             <Text style={styles.actionTitle}>Members</Text>
             <Text style={styles.actionSubtitle}>Manage family</Text>
           </Pressable>
@@ -159,7 +154,9 @@ export default function HomeScreen({ navigation }: Props) {
             style={styles.actionCard}
             onPress={() => navigation.navigate('Transactions')}
           >
-            <ArrowLeftRight size={32} color="#10B981" />
+            <View style={styles.actionIconContainer}>
+              <ArrowLeftRight size={28} color="#10B981" />
+            </View>
             <Text style={styles.actionTitle}>Transactions</Text>
             <Text style={styles.actionSubtitle}>Payment history</Text>
           </Pressable>
@@ -169,7 +166,9 @@ export default function HomeScreen({ navigation }: Props) {
             style={styles.actionCard}
             onPress={() => navigation.navigate('Reports')}
           >
-            <FileText size={32} color="#F97316" />
+            <View style={styles.actionIconContainer}>
+              <FileText size={28} color="#F59E0B" />
+            </View>
             <Text style={styles.actionTitle}>Reports</Text>
             <Text style={styles.actionSubtitle}>View reports</Text>
           </Pressable>
@@ -179,7 +178,9 @@ export default function HomeScreen({ navigation }: Props) {
             style={styles.actionCard}
             onPress={() => navigation.navigate('Support')}
           >
-            <MessageCircle size={32} color="#EC4899" />
+            <View style={styles.actionIconContainer}>
+              <MessagesSquare  size={28} color="#EC4899" />
+            </View>
             <Text style={styles.actionTitle}>Support</Text>
             <Text style={styles.actionSubtitle}>Get help</Text>
           </Pressable>
@@ -200,37 +201,42 @@ export default function HomeScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#0A0A0A',
   },
   content: {
     flex: 1,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
-    color: '#fff',
-    marginBottom: 12,
+    color: '#FAFAFA',
+    marginBottom: 16,
   },
 
-  // Wallet Balance Card Styles
+  // ✅ Wallet Balance Card Styles - More Appealing
   walletBalanceCard: {
-    backgroundColor: '#eae7ecff',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#C4B5FD',
+    backgroundColor: '#1A1625', // ✅ Subtle purple-tinted dark background
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 24,
+    borderWidth: 1.5,
+    borderColor: '#2D1B4E', // ✅ Soft purple border
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
   },
   walletHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   walletIconContainer: {
-    width: 40,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: '#DDD6FE',
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#251B35', // ✅ Deeper purple background
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -238,13 +244,13 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     fontWeight: '700',
-    color: '#1F2937',
+    color: '#F5F3FF', // ✅ Slightly purple-tinted white
   },
   walletDivider: {
     height: 1,
-    backgroundColor: '#C4B5FD',
-    marginVertical: 14,
-    borderStyle: 'dashed',
+    backgroundColor: '#2D1B4E', // ✅ Purple divider
+    marginVertical: 16,
+    opacity: 0.6,
   },
   walletBalanceRow: {
     flexDirection: 'row',
@@ -253,62 +259,71 @@ const styles = StyleSheet.create({
   },
   walletBalanceLabel: {
     fontSize: 13,
-    color: '#6B7280',
+    color: '#A78BFA', // ✅ Light purple label
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   balanceWithRewards: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   walletBalanceValue: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '900',
-    color: '#1F2937',
+    color: '#FAFAFA',
+    letterSpacing: -0.5,
   },
-  // ✅ NEW: Rewards Badge Styles
+  // Rewards Badge Styles
   rewardsBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#DDD6FE',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    gap: 5,
+    backgroundColor: '#251B35', // ✅ Dark purple background
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#C4B5FD',
+    borderColor: '#3D2B5F', // ✅ Purple border
   },
   rewardCoinSmall: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: '#FBBF24',
     alignItems: 'center',
     justifyContent: 'center',
   },
   rewardCoinText: {
-    color: '#1F2937',
-    fontSize: 10,
+    color: '#18181B',
+    fontSize: 11,
     fontWeight: '900',
   },
   rewardsText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '900',
-    color: '#059669',
+    color: '#10B981',
   },
   addBalanceBtn: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
+    backgroundColor: '#2D1B4E', // ✅ Purple-tinted button
+    paddingHorizontal: 15,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#C4B5FD',
+    borderColor: '#3D2B5F',
+    marginBottom:-14
   },
   addBalanceText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1F2937',
+    color: '#E9D5FF', // ✅ Light purple text
+  },
+
+  quickActionsTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FAFAFA',
+    marginBottom: 12,
   },
 
   grid: {
@@ -318,42 +333,51 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   actionCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: '#18181B',
+    borderRadius: 16,
+    padding: 20,
     width: '48%',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#27272A',
+  },
+  actionIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: '#0A0A0A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
   },
   actionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#fff',
-    marginTop: 8,
+    color: '#FAFAFA',
+    marginTop: 4,
   },
   actionSubtitle: {
     fontSize: 12,
-    color: '#94A3B8',
+    color: '#71717A',
     marginTop: 4,
     textAlign: 'center',
   },
   infoCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
+    backgroundColor: '#18181B',
+    borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#27272A',
   },
   infoTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#fff',
+    color: '#FAFAFA',
     marginBottom: 8,
   },
   infoText: {
     fontSize: 14,
-    color: '#CBD5E1',
+    color: '#A1A1AA',
     lineHeight: 20,
   },
 });

@@ -1,4 +1,4 @@
-// components/common/AppDrawer.tsx - LOGOUT FIX
+// components/common/AppDrawer.tsx
 import React from 'react';
 import { Text, StyleSheet, Alert } from 'react-native';
 import { useDispatch } from 'react-redux';
@@ -7,16 +7,16 @@ import { logout } from '../../store/slices/authSlice';
 
 import Drawer from './Drawer';
 import DrawerHeader from './drawer/DrawerHeader';
-import DrawerMembers from './drawer/DrawerMembers';
 import DrawerItem from './drawer/DrawerItem';
 const packageJson = require('../../package.json');
 
 import {
   FileText,
-  MessageCircle,
+  MessagesSquare ,
   LogOut,
   ShieldCheck,
-  ArrowLeftRight
+  ArrowLeftRight,
+  CircleUserRound,
 } from 'lucide-react-native';
 
 interface AppDrawerProps {
@@ -24,7 +24,6 @@ interface AppDrawerProps {
   onClose: () => void;
   navigation: any;
   onOpenBrowser?: (title: string, url: string) => void;
-  userCredits?: number;
 }
 
 const AppDrawer: React.FC<AppDrawerProps> = ({
@@ -32,7 +31,6 @@ const AppDrawer: React.FC<AppDrawerProps> = ({
   onClose,
   navigation,
   onOpenBrowser,
-  userCredits = 50,
 }) => {
   const dispatch = useDispatch<AppDispatch>();
 
@@ -54,7 +52,6 @@ const AppDrawer: React.FC<AppDrawerProps> = ({
     }, 200);
   };
 
-  // ✅ FIXED: Actually call Redux logout action
   const handleLogout = async () => {
     onClose();
     
@@ -73,17 +70,14 @@ const AppDrawer: React.FC<AppDrawerProps> = ({
             try {
               console.log('🚪 Logout button pressed');
               
-              // ✅ Dispatch Redux logout action
               await dispatch(logout()).unwrap();
               
               console.log('✅ Logout successful, navigating to Auth');
               
-              // Navigate to Auth screen
               navigation.replace('Auth');
             } catch (error: any) {
               console.error('❌ Logout error:', error);
               
-              // Even if logout fails, still navigate to Auth
               navigation.replace('Auth');
             }
           }
@@ -111,12 +105,14 @@ const AppDrawer: React.FC<AppDrawerProps> = ({
         </>
       }
     >
-      <DrawerHeader
-        credits={userCredits}
-        onClose={onClose}
-      />
+      <DrawerHeader onClose={onClose} />
 
-      <DrawerMembers />
+      {/* ✅ ADD PROFILE LINK */}
+      <DrawerItem
+        label="My Profile"
+        icon={CircleUserRound}
+        onPress={() => handleNavigation('Profile')}
+      />
 
       <DrawerItem
         label="Reports"
@@ -132,7 +128,7 @@ const AppDrawer: React.FC<AppDrawerProps> = ({
 
       <DrawerItem
         label="Support"
-        icon={MessageCircle}
+        icon={MessagesSquare }
         onPress={() => handleNavigation('Support')}
       />
 

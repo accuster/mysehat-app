@@ -1,5 +1,5 @@
+// components/screens/user/ManageMembersScreen.tsx
 /* eslint-disable radix */
-/* eslint-disable react-native/no-inline-styles */
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
-import { X, Edit2, Trash2, ArrowLeft } from 'lucide-react-native';
+import { X, Edit2, Trash2, ArrowLeft, User } from 'lucide-react-native';
 
 import {
   fetchMembers,
@@ -33,7 +33,6 @@ export default function ManageMembersScreen({ navigation }: any) {
     (state: RootState) => state.members
   );
   
-  // ✅ ADD THIS: Use safe area hook
   const insets = useSafeAreaInsets();
 
   // Form states
@@ -178,28 +177,25 @@ export default function ManageMembersScreen({ navigation }: any) {
     );
   };
 
-  // ✅ ADD THIS: Calculate dynamic bottom padding
   const contentBottomPadding = 40 + (insets.bottom > 0 ? insets.bottom : 0);
 
   return (
-    // ✅ CHANGE 1: Add 'bottom' to edges
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* ✅ Simple Header with Back Button */}
+      {/* Simple Header with Back Button */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <ArrowLeft size={24} color="#fff" />
+          <ArrowLeft size={24} color="#FAFAFA" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Manage Members</Text>
         <View style={styles.placeholder} />
       </View>
 
-      {/* ---------- CONTENT ---------- */}
-      {/* ✅ CHANGE 2: Use dynamic padding */}
+      {/* CONTENT */}
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: contentBottomPadding }]}>
         {/* LOADING STATE */}
         {isLoading && members.length === 0 && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#7C3AED" />
+            <ActivityIndicator size="large" color="#8B5CF6" />
             <Text style={styles.loadingText}>Loading members...</Text>
           </View>
         )}
@@ -215,43 +211,65 @@ export default function ManageMembersScreen({ navigation }: any) {
         )}
 
         {/* MEMBERS LIST */}
-        {members.map((member) => (
-          <View key={member.id} style={styles.memberCard}>
-            <View style={styles.memberInfo}>
-              <View style={styles.memberHeader}>
-                <Text style={styles.memberName}>{member.name}</Text>
-                {member.userType === 'SuperUser' && (
-                  <View style={styles.superUserBadge}>
-                    <Text style={styles.superUserText}>Super User</Text>
+        {members.map((member) => {
+          const isSuperUser = member.userType === 'SuperUser';
+          
+          return (
+            <View key={member.id} style={styles.memberCard}>
+              {/* Icon Container - Distinct for Super User */}
+              <View style={[
+                styles.iconContainer,
+                isSuperUser && styles.iconContainerSuperUser
+              ]}>
+                <User 
+                  size={24} 
+                  color={isSuperUser ? '#FBBF24' : '#8B5CF6'} 
+                  strokeWidth={2.5} 
+                />
+                {/* Crown indicator for Super User */}
+                {isSuperUser && (
+                  <View style={styles.crownBadge}>
+                    <Text style={styles.crownIcon}>👑</Text>
                   </View>
                 )}
               </View>
-              <Text style={styles.memberMeta}>
-                {member.age}/{member.gender}
-              </Text>
-            </View>
 
-            {/* Show edit button for ALL users (SuperUser and FamilyUser) */}
-            <View style={styles.memberActions}>
-              <Pressable
-                style={styles.actionBtn}
-                onPress={() => handleEditClick(member)}
-              >
-                <Edit2 size={18} color="#3B82F6" />
-              </Pressable>
+              <View style={styles.memberInfo}>
+                <View style={styles.memberHeader}>
+                  <Text style={styles.memberName}>{member.name}</Text>
+                  {isSuperUser && (
+                    <View style={styles.superUserBadge}>
+                      <Text style={styles.superUserText}>Super User</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.memberMeta}>
+                  Age: {member.age} • {member.gender}
+                </Text>
+              </View>
 
-              {/* Only show delete button for FamilyUser, NOT for SuperUser */}
-              {member.userType === 'FamilyUser' && (
+              {/* Show edit button for ALL users */}
+              <View style={styles.memberActions}>
                 <Pressable
-                  style={[styles.actionBtn, styles.deleteBtn]}
-                  onPress={() => handleDeleteMember(member)}
+                  style={styles.actionBtn}
+                  onPress={() => handleEditClick(member)}
                 >
-                  <Trash2 size={18} color="#EF4444" />
+                  <Edit2 size={18} color="#3B82F6" strokeWidth={2.5} />
                 </Pressable>
-              )}
+
+                {/* Only show delete button for FamilyUser */}
+                {!isSuperUser && (
+                  <Pressable
+                    style={[styles.actionBtn, styles.deleteBtn]}
+                    onPress={() => handleDeleteMember(member)}
+                  >
+                    <Trash2 size={18} color="#EF4444" strokeWidth={2.5} />
+                  </Pressable>
+                )}
+              </View>
             </View>
-          </View>
-        ))}
+          );
+        })}
 
         {/* ADD FAMILY MEMBER BUTTON */}
         <Pressable
@@ -262,7 +280,7 @@ export default function ManageMembersScreen({ navigation }: any) {
         </Pressable>
       </ScrollView>
 
-      {/* ---------- ADD MEMBER MODAL ---------- */}
+      {/* ADD MEMBER MODAL */}
       <Modal
         visible={showAddForm}
         transparent
@@ -282,7 +300,7 @@ export default function ManageMembersScreen({ navigation }: any) {
                   resetForm();
                 }}
               >
-                <X size={24} color="#94A3B8" />
+                <X size={24} color="#A1A1AA" />
               </Pressable>
             </View>
 
@@ -290,7 +308,7 @@ export default function ManageMembersScreen({ navigation }: any) {
               <Text style={styles.label}>Name *</Text>
               <TextInput
                 placeholder="Enter full name"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor="#71717A"
                 value={name}
                 onChangeText={(text) => {
                   setName(text);
@@ -303,7 +321,7 @@ export default function ManageMembersScreen({ navigation }: any) {
               <Text style={styles.label}>Age *</Text>
               <TextInput
                 placeholder="Enter age"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor="#71717A"
                 value={age}
                 onChangeText={(text) => {
                   setAge(text.replace(/[^0-9]/g, ''));
@@ -329,7 +347,7 @@ export default function ManageMembersScreen({ navigation }: any) {
                     <Text
                       style={[
                         styles.genderText,
-                        gender === g && { color: '#fff' },
+                        gender === g && styles.genderTextActive,
                       ]}
                     >
                       {g}
@@ -344,7 +362,7 @@ export default function ManageMembersScreen({ navigation }: any) {
                 disabled={isLoading}
               >
                 {isLoading ? (
-                  <ActivityIndicator color="#020617" />
+                  <ActivityIndicator color="#FAFAFA" />
                 ) : (
                   <Text style={styles.saveText}>Save Member</Text>
                 )}
@@ -354,7 +372,7 @@ export default function ManageMembersScreen({ navigation }: any) {
         </View>
       </Modal>
 
-      {/* ---------- EDIT MODAL ---------- */}
+      {/* EDIT MODAL */}
       <Modal
         visible={showEditModal}
         transparent
@@ -376,7 +394,7 @@ export default function ManageMembersScreen({ navigation }: any) {
                   dispatch(setSelectedMember(null));
                 }}
               >
-                <X size={24} color="#94A3B8" />
+                <X size={24} color="#A1A1AA" />
               </Pressable>
             </View>
 
@@ -384,7 +402,7 @@ export default function ManageMembersScreen({ navigation }: any) {
               <Text style={styles.label}>Name *</Text>
               <TextInput
                 placeholder="Enter full name"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor="#71717A"
                 value={name}
                 onChangeText={(text) => {
                   setName(text);
@@ -397,7 +415,7 @@ export default function ManageMembersScreen({ navigation }: any) {
               <Text style={styles.label}>Age *</Text>
               <TextInput
                 placeholder="Enter age"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor="#71717A"
                 value={age}
                 onChangeText={(text) => {
                   setAge(text.replace(/[^0-9]/g, ''));
@@ -423,7 +441,7 @@ export default function ManageMembersScreen({ navigation }: any) {
                     <Text
                       style={[
                         styles.genderText,
-                        gender === g && { color: '#fff' },
+                        gender === g && styles.genderTextActive,
                       ]}
                     >
                       {g}
@@ -438,7 +456,7 @@ export default function ManageMembersScreen({ navigation }: any) {
                 disabled={isLoading}
               >
                 {isLoading ? (
-                  <ActivityIndicator color="#020617" />
+                  <ActivityIndicator color="#FAFAFA" />
                 ) : (
                   <Text style={styles.saveText}>Update Member</Text>
                 )}
@@ -451,12 +469,12 @@ export default function ManageMembersScreen({ navigation }: any) {
   );
 }
 
-/* ---------- STYLES ---------- */
+/* STYLES */
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#020617',
+    backgroundColor: '#0A0A0A',
   },
   
   header: {
@@ -478,7 +496,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#fff',
+    color: '#FAFAFA',
   },
   placeholder: {
     width: 40,
@@ -486,7 +504,6 @@ const styles = StyleSheet.create({
   
   content: {
     padding: 16,
-    // ✅ CHANGE 3: Remove fixed paddingBottom (now applied dynamically)
   },
 
   loadingContainer: {
@@ -494,7 +511,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    color: '#94A3B8',
+    color: '#71717A',
     marginTop: 12,
     fontSize: 14,
   },
@@ -504,24 +521,59 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: {
-    color: '#fff',
+    color: '#FAFAFA',
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 8,
   },
   emptySubtext: {
-    color: '#94A3B8',
+    color: '#71717A',
     fontSize: 14,
   },
 
   memberCard: {
-    backgroundColor: '#0F172A',
-    borderRadius: 14,
-    padding: 14,
+    backgroundColor: '#18181B',
+    borderRadius: 16,
+    padding: 16,
     marginBottom: 12,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#27272A',
+  },
+  // ✅ Regular member icon
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: 'rgba(139, 92, 246, 0.15)', // Purple tint
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+    position: 'relative',
+  },
+  // ✅ Super User icon - distinct with golden gradient
+  iconContainerSuperUser: {
+    backgroundColor: 'rgba(251, 191, 36, 0.15)', // Golden tint
+    borderWidth: 2,
+    borderColor: 'rgba(251, 191, 36, 0.3)', // Golden border
+  },
+  // ✅ Crown badge for Super User
+  crownBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#18181B',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FBBF24',
+  },
+  crownIcon: {
+    fontSize: 10,
   },
   memberInfo: {
     flex: 1,
@@ -533,126 +585,65 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   memberName: {
-    color: '#fff',
+    color: '#FAFAFA',
     fontSize: 16,
     fontWeight: '700',
   },
   superUserBadge: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#FBBF24', // ✅ Golden badge
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   superUserText: {
-    color: '#fff',
+    color: '#18181B', // ✅ Dark text on golden background
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '800',
     textTransform: 'uppercase',
   },
   memberMeta: {
-    color: '#94A3B8',
+    color: '#A1A1AA',
     fontSize: 13,
-    marginTop: 4,
+    marginTop: 2,
+    fontWeight: '500',
   },
   memberActions: {
     flexDirection: 'row',
     gap: 8,
   },
   actionBtn: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#1E293B',
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: '#0A0A0A',
   },
   deleteBtn: {
-    backgroundColor: '#1E293B',
+    backgroundColor: '#0A0A0A',
   },
 
   addBtn: {
-    backgroundColor: '#7C3AED',
-    paddingVertical: 14,
+    backgroundColor: '#8B5CF6',
+    paddingVertical: 16,
     borderRadius: 16,
     alignItems: 'center',
     marginTop: 8,
   },
   addText: {
-    color: '#fff',
+    color: '#FAFAFA',
     fontWeight: '800',
-    fontSize: 14,
+    fontSize: 15,
   },
 
-  label: {
-    color: '#D1D5DB',
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 8,
-    marginTop: 12,
-  },
-  input: {
-    backgroundColor: '#020617',
-    borderRadius: 12,
-    padding: 12,
-    color: '#fff',
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  inputError: {
-    borderColor: '#EF4444',
-  },
-  errorText: {
-    color: '#EF4444',
-    fontSize: 12,
-    marginTop: 4,
-  },
-
-  genderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  genderBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#334155',
-    marginHorizontal: 4,
-    alignItems: 'center',
-  },
-  genderActive: {
-    backgroundColor: '#7C3AED',
-    borderColor: '#7C3AED',
-  },
-  genderText: {
-    color: '#94A3B8',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-
-  saveBtn: {
-    backgroundColor: '#22C55E',
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  saveText: {
-    color: '#020617',
-    fontWeight: '800',
-  },
-  btnDisabled: {
-    opacity: 0.5,
-  },
-
+  // Modal styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#18181B',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '80%',
+    maxHeight: '85%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -660,14 +651,83 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#334155',
+    borderBottomColor: '#27272A',
   },
   modalTitle: {
-    color: '#fff',
-    fontSize: 18,
+    color: '#FAFAFA',
+    fontSize: 20,
     fontWeight: '800',
   },
   modalBody: {
     padding: 20,
+  },
+
+  label: {
+    color: '#E5E7EB',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+    marginTop: 12,
+  },
+  input: {
+    backgroundColor: '#0A0A0A',
+    borderRadius: 12,
+    padding: 14,
+    color: '#FAFAFA',
+    borderWidth: 1,
+    borderColor: '#27272A',
+    fontSize: 15,
+  },
+  inputError: {
+    borderColor: '#EF4444',
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 12,
+    marginTop: 6,
+    fontWeight: '500',
+  },
+
+  genderRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  genderBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#27272A',
+    backgroundColor: '#0A0A0A',
+    alignItems: 'center',
+  },
+  genderActive: {
+    backgroundColor: '#8B5CF6',
+    borderColor: '#8B5CF6',
+  },
+  genderText: {
+    color: '#A1A1AA',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  genderTextActive: {
+    color: '#FAFAFA',
+  },
+
+  saveBtn: {
+    backgroundColor: '#8B5CF6',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  saveText: {
+    color: '#FAFAFA',
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  btnDisabled: {
+    opacity: 0.5,
   },
 });

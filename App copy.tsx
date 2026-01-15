@@ -1,8 +1,10 @@
+// App.tsx - WITH REDUX PERSIST
 import React from 'react';
 import { StatusBar, useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Provider } from 'react-redux';
-import { store } from './store';
+import { PersistGate } from 'redux-persist/integration/react';
+import { store, persistor } from './store'; 
 import AppNavigator from './components/navigation/AppNavigator';
 
 function App() {
@@ -10,10 +12,13 @@ function App() {
 
   return (
     <Provider store={store}>
-      <SafeAreaProvider>
-        <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-        <AppNavigator />
-      </SafeAreaProvider>
+      {/* ✅ Wrap with PersistGate - waits for Redux state to be restored */}
+      <PersistGate loading={null} persistor={persistor}>
+        <SafeAreaProvider>
+          <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+          <AppNavigator />
+        </SafeAreaProvider>
+      </PersistGate>
     </Provider>
   );
 }

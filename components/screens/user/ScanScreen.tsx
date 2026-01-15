@@ -1,3 +1,4 @@
+// components/screens/user/ScanScreen.tsx
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useEffect, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,6 +10,7 @@ import {
   Alert,
   Linking,
   ActivityIndicator,
+  AppState,
 } from 'react-native';
 import {
   Camera,
@@ -16,13 +18,10 @@ import {
   useCodeScanner,
 } from 'react-native-vision-camera';
 
-import AppHeader from '../../common/AppHeader';
-import AppDrawer from '../../common/AppDrawer'; // ✅ Use AppDrawer component
-import InAppBrowser from '../../common/InAppBrowser'; // ✅ Add InAppBrowser
-
 import { Animated, Easing } from 'react-native';
 import { useRef } from 'react';
 import { Vibration, Platform } from 'react-native';
+import { Flashlight, FlashlightOff, ArrowLeft } from 'lucide-react-native'; // ✅ Add ArrowLeft
 
 // ✅ Redux imports
 import { useAppDispatch, useAppSelector } from '../../../store/hook';
@@ -34,23 +33,30 @@ type Props = {
 };
 
 export default function ScanScreen({ navigation }: Props) {
+  // ✅ ALL STATE HOOKS FIRST
   const [hasPermission, setHasPermission] = useState(false);
   const [isActive, setIsActive] = useState(true);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [scannedData, setScannedData] = useState<string | null>(null);
   const [torchOn, setTorchOn] = useState(false);
 
-  // ✅ Browser state
-  const [browserOpen, setBrowserOpen] = useState(false);
-  const [browserUrl, setBrowserUrl] = useState('');
-  const [browserTitle, setBrowserTitle] = useState('');
-
-  // ✅ Redux state
+  // ✅ REDUX HOOKS
   const dispatch = useAppDispatch();
   const { isLoading: orderLoading } = useAppSelector((state) => state.orders);
   const { user } = useAppSelector((state) => state.auth);
 
-  // ✅ Get user data with fallback
+  // ✅ REFS AND ANIMATIONS
+  const scanLineAnim = useRef(new Animated.Value(0)).current;
+
+  // ✅ DEVICE HOOKS (Must be called unconditionally!)
+  const device = useCameraDevice('back');
+  const hasTorch = device?.hasTorch ?? false;
+
+  // ✅ INTERPOLATION
+  const translateY = scanLineAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-110, 110],
+  });
+
   const getUserData = async () => {
     // Try Redux first
     if (user?.mobile && user?.userId) {
@@ -84,11 +90,7 @@ export default function ScanScreen({ navigation }: Props) {
     throw new Error('User data not found. Please log in again.');
   };
 
-  const scanLineAnim = useRef(new Animated.Value(0)).current;
-
-  const device = useCameraDevice('back');
-  const hasTorch = device?.hasTorch ?? false;
-
+  // ✅ ALL useEffect HOOKS MUST BE BEFORE CONDITIONAL RETURNS
   // ✅ Verify user data on mount
   useEffect(() => {
     const checkUser = async () => {
@@ -116,12 +118,7 @@ export default function ScanScreen({ navigation }: Props) {
     checkUser();
   }, []);
 
-  const translateY = scanLineAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-110, 110],
-  });
-
-  // Request camera permission
+  // ✅ Request camera permission
   useEffect(() => {
     (async () => {
       const status = await Camera.requestCameraPermission();
@@ -140,6 +137,29 @@ export default function ScanScreen({ navigation }: Props) {
     })();
   }, []);
 
+  // ✅ Re-check camera permission when app becomes active (user returns from Settings)
+  useEffect(() => {
+    const handleAppStateChange = async (nextAppState: string) => {
+      if (nextAppState === 'active') {
+        console.log('📱 App became active - checking camera permission...');
+        const status = await Camera.getCameraPermissionStatus();
+        console.log('📷 Camera permission status:', status);
+        setHasPermission(status === 'granted');
+        
+        if (status === 'granted') {
+          console.log('✅ Camera permission granted!');
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  // ✅ Scan line animation
   useEffect(() => {
     if (!isActive) return;
 
@@ -176,6 +196,7 @@ export default function ScanScreen({ navigation }: Props) {
 
     const unsubscribeBlur = navigation.addListener('blur', () => {
       setIsActive(false);
+      setTorchOn(false); // ✅ Turn off torch when leaving screen
     });
 
     return () => {
@@ -184,15 +205,16 @@ export default function ScanScreen({ navigation }: Props) {
     };
   }, [navigation]);
 
-  useEffect(() => {
-    if (isActive && hasTorch) {
-      setTorchOn(true);
-    } else {
-      setTorchOn(false);
+  // ✅ Toggle torch function
+  const toggleTorch = () => {
+    if (hasTorch && isActive) {
+      setTorchOn(!torchOn);
+    } else if (!hasTorch) {
+      Alert.alert('Flashlight Not Available', 'Your device does not have a flashlight.');
     }
-  }, [isActive, hasTorch]);
+  };
 
-  // QR Code scanner
+  // ✅ QR Code scanner - MUST be before conditional returns
   const codeScanner = useCodeScanner({
     codeTypes: ['qr', 'ean-13'],
     onCodeScanned: codes => {
@@ -299,35 +321,23 @@ export default function ScanScreen({ navigation }: Props) {
     }
   };
 
-  // ✅ Handle browser open
-  const handleOpenBrowser = (title: string, url: string) => {
-    setBrowserTitle(title);
-    setBrowserUrl(url);
-    setBrowserOpen(true);
+  // ✅ Handle back navigation
+  const handleBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    }
   };
 
   // Loading state
   if (device == null) {
     return (
-      <SafeAreaView style={styles.root}>
-        <AppHeader onMenuClick={() => setDrawerOpen(true)} />
-        
-        {/* ✅ Use AppDrawer */}
-        <AppDrawer
-          open={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
-          navigation={navigation}
-          onOpenBrowser={handleOpenBrowser}
-          userCredits={50}
-        />
-
-        {/* ✅ Add InAppBrowser */}
-        <InAppBrowser
-          visible={browserOpen}
-          url={browserUrl}
-          title={browserTitle}
-          onClose={() => setBrowserOpen(false)}
-        />
+      <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
+        {/* ✅ Solid Header Bar */}
+        <View style={styles.header}>
+          <Pressable onPress={handleBack} style={styles.backButton}>
+            <ArrowLeft size={24} color="#FAFAFA" />
+          </Pressable>
+        </View>
 
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#8B5CF6" />
@@ -340,25 +350,13 @@ export default function ScanScreen({ navigation }: Props) {
   // Permission denied
   if (!hasPermission) {
     return (
-      <SafeAreaView style={styles.root}>
-        <AppHeader onMenuClick={() => setDrawerOpen(true)} />
-        
-        {/* ✅ Use AppDrawer */}
-        <AppDrawer
-          open={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
-          navigation={navigation}
-          onOpenBrowser={handleOpenBrowser}
-          userCredits={50}
-        />
-
-        {/* ✅ Add InAppBrowser */}
-        <InAppBrowser
-          visible={browserOpen}
-          url={browserUrl}
-          title={browserTitle}
-          onClose={() => setBrowserOpen(false)}
-        />
+      <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
+        {/* ✅ Solid Header Bar */}
+        <View style={styles.header}>
+          <Pressable onPress={handleBack} style={styles.backButton}>
+            <ArrowLeft size={24} color="#FAFAFA" />
+          </Pressable>
+        </View>
 
         <View style={styles.permissionContainer}>
           <Text style={styles.permissionTitle}>Camera Permission Required</Text>
@@ -377,83 +375,119 @@ export default function ScanScreen({ navigation }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.root}>
-      {/* Header */}
-      <AppHeader onMenuClick={() => setDrawerOpen(true)} />
-
-      {/* ✅ Use AppDrawer */}
-      <AppDrawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        navigation={navigation}
-        onOpenBrowser={handleOpenBrowser}
-        userCredits={50}
-      />
-
-      {/* ✅ Add InAppBrowser */}
-      <InAppBrowser
-        visible={browserOpen}
-        url={browserUrl}
-        title={browserTitle}
-        onClose={() => setBrowserOpen(false)}
-      />
-
-      {/* Camera View */}
-      <Camera
-        style={StyleSheet.absoluteFill}
-        device={device}
-        isActive={isActive}
-        codeScanner={codeScanner}
-        torch={torchOn ? 'on' : 'off'}
-      />
-
-      {/* Overlay UI */}
-      <View style={styles.overlay}>
-        <View style={styles.container}>
-          {/* Scan Frame */}
-          <View style={styles.frameWrapper}>
-            <View style={styles.frame}>
-              {/* Corner brackets */}
-              <View style={[styles.corner, styles.tl]} />
-              <View style={[styles.corner, styles.tr]} />
-              <View style={[styles.corner, styles.bl]} />
-              <View style={[styles.corner, styles.br]} />
-              <Animated.View
-                style={[styles.scanLine, { transform: [{ translateY }] }]}
-              />
-            </View>
-
-            {/* Text */}
-            <View style={styles.textBlock}>
-              <Text style={styles.title}>
-                Scan the QR Code displayed on MySehat BMI
-              </Text>
-              <Text style={styles.subtitle}>
-                {isActive ? 'Scanning…' : 'Processing…'}
-              </Text>
-            </View>
-          </View>
-        </View>
+    <SafeAreaView style={styles.root} edges={['top']}>
+      {/* ✅ Solid Header Bar - Always on top */}
+      <View style={styles.header}>
+        <Pressable onPress={handleBack} style={styles.backButton}>
+          <ArrowLeft size={24} color="#FAFAFA" />
+        </Pressable>
       </View>
 
-      {/* ✅ Loading Overlay - Shows during backend processing */}
-      {orderLoading && (
-        <View style={styles.processingOverlay}>
-          <View style={styles.processingBox}>
-            <ActivityIndicator size="large" color="#8B5CF6" />
-            <Text style={styles.processingTitle}>Processing QR Code...</Text>
-            <Text style={styles.processingSubtext}>
-              Decrypting and validating data
-            </Text>
+      {/* Camera View */}
+      <View style={styles.cameraContainer}>
+        <Camera
+          style={StyleSheet.absoluteFill}
+          device={device}
+          isActive={isActive}
+          codeScanner={codeScanner}
+          torch={torchOn ? 'on' : 'off'}
+        />
+
+        {/* Overlay UI */}
+        <View style={styles.overlay}>
+          <View style={styles.container}>
+            {/* Scan Frame */}
+            <View style={styles.frameWrapper}>
+              <View style={styles.frame}>
+                {/* Corner brackets */}
+                <View style={[styles.corner, styles.tl]} />
+                <View style={[styles.corner, styles.tr]} />
+                <View style={[styles.corner, styles.bl]} />
+                <View style={[styles.corner, styles.br]} />
+                <Animated.View
+                  style={[styles.scanLine, { transform: [{ translateY }] }]}
+                />
+              </View>
+
+              {/* ✅ Torch Button - Below Frame */}
+              {hasTorch && (
+                <Pressable
+                  style={[styles.torchButton, torchOn && styles.torchButtonActive]}
+                  onPress={toggleTorch}
+                  disabled={!isActive}
+                >
+                  {torchOn ? (
+                    <Flashlight 
+                      size={24} 
+                      color="#FFFFFF" 
+                      strokeWidth={2.5}
+                      fill="#FFFFFF"
+                    />
+                  ) : (
+                    <FlashlightOff 
+                      size={24} 
+                      color="#FFFFFF" 
+                      strokeWidth={2.5}
+                    />
+                  )}
+                </Pressable>
+              )}
+
+              {/* Text */}
+              <View style={styles.textBlock}>
+                <Text style={styles.title}>
+                  Scan the QR Code displayed on MySehat BMI
+                </Text>
+                <Text style={styles.subtitle}>
+                  {isActive ? 'Scanning…' : 'Processing…'}
+                </Text>
+              </View>
+            </View>
           </View>
         </View>
-      )}
+
+        {/* ✅ Loading Overlay - Shows during backend processing */}
+        {orderLoading && (
+          <View style={styles.processingOverlay}>
+            <View style={styles.processingBox}>
+              <ActivityIndicator size="large" color="#8B5CF6" />
+              <Text style={styles.processingTitle}>Processing QR Code...</Text>
+              <Text style={styles.processingSubtext}>
+                Decrypting and validating data
+              </Text>
+            </View>
+          </View>
+        )}
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
+    flex: 1,
+    backgroundColor: '#0A0A0A',
+  },
+
+  // ✅ Solid Header Bar (Like ReportsScreen)
+  header: {
+    height: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#27272A',
+    backgroundColor: '#09090B',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // ✅ Camera Container (fills remaining space)
+  cameraContainer: {
     flex: 1,
     backgroundColor: '#020617',
   },
@@ -521,8 +555,25 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 20,
   },
 
+  // ✅ Torch Button Styles
+  torchButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 20,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  torchButtonActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+
   textBlock: {
-    marginTop: 15,
+    marginTop: 20,
     alignItems: 'center',
   },
 

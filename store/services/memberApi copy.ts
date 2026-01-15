@@ -11,8 +11,8 @@ export interface Member {
   name: string;
   age: number;
   gender: 'Male' | 'Female' | 'Other';
-  email?: string | null;
-  profileImage?: string | null;
+  email?: string | null; // ✅ NEW
+  profileImage?: string | null; // ✅ NEW
   userType: 'SuperUser' | 'FamilyUser'; 
   createdAt?: string;
   updatedAt?: string;
@@ -31,14 +31,14 @@ export interface UpdateMemberRequest {
 }
 
 // ============================================================================
-// ✅ NEW: Profile Update Types with File Support
+// ✅ NEW: Profile Update Types
 // ============================================================================
 export interface UpdateProfileRequest {
   fullName?: string;
   email?: string | null;
   age?: number;
   gender?: 'Male' | 'Female' | 'Other';
-  profileImage?: string | null; // File URI from image picker
+  profileImage?: string | null;
 }
 
 export interface UpdateProfileResponse {
@@ -58,7 +58,7 @@ class MemberApiService {
   constructor() {
     this.api = axios.create({
       baseURL: API_BASE_URL,
-      timeout: 30000, // Increased timeout for file uploads
+      timeout: 10000,
       headers: {
         'Content-Type': 'application/json',
       },
@@ -210,97 +210,24 @@ class MemberApiService {
   }
 
   // ============================================================================
-  // ✅ NEW: Update Profile with File Upload (FormData)
+  // ✅ NEW: Update Profile (SuperUser)
   // ============================================================================
   /**
    * Update logged-in user's profile
    * Endpoint: PUT /api/profile
-   * Uses FormData to upload profile image file
    */
   async updateProfile(data: UpdateProfileRequest): Promise<UpdateProfileResponse> {
     try {
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('👤 API: Updating profile with file upload');
+      console.log('👤 API: Updating profile');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('Request data:', JSON.stringify({ ...data, profileImage: data.profileImage ? 'FILE' : null }, null, 2));
+      console.log('Request data:', JSON.stringify(data, null, 2));
       
-      // ✅ Create FormData for multipart/form-data upload
-      const formData = new FormData();
-      
-      // Add text fields
-      if (data.fullName !== undefined) {
-        formData.append('fullName', data.fullName);
-      }
-      
-      if (data.email !== undefined && data.email !== null) {
-        formData.append('email', data.email);
-      }
-      
-      if (data.age !== undefined) {
-        formData.append('age', data.age.toString());
-      }
-      
-      if (data.gender !== undefined) {
-        formData.append('gender', data.gender);
-      }
-      
-      // ✅ Add profile image file (if provided)
-      if (data.profileImage && data.profileImage !== null) {
-        // Extract filename from URI
-        const uriParts = data.profileImage.split('/');
-        const filename = uriParts[uriParts.length - 1];
-        
-        // Determine MIME type from file extension
-        const extension = filename.split('.').pop()?.toLowerCase();
-        let mimeType = 'image/jpeg'; // Default
-        
-        if (extension === 'png') {
-          mimeType = 'image/png';
-        } else if (extension === 'jpg' || extension === 'jpeg') {
-          mimeType = 'image/jpeg';
-        } else if (extension === 'gif') {
-          mimeType = 'image/gif';
-        } else if (extension === 'webp') {
-          mimeType = 'image/webp';
-        }
-        
-        // ✅ Create file object for upload
-        const file = {
-          uri: data.profileImage,
-          type: mimeType,
-          name: filename || 'profile.jpg',
-        } as any;
-        
-        formData.append('profileImage', file);
-        
-        console.log('📎 Appending image file:', {
-          name: file.name,
-          type: file.type,
-          uri: file.uri.substring(0, 50) + '...',
-        });
-      }
-      
-      // Get token for Authorization header
-      const token = await storage.getToken();
-      
-      console.log('📤 Sending FormData request...');
-      
-      // ✅ Send FormData with multipart/form-data
-      const response = await axios.put<{
+      const response = await this.api.put<{
         success: boolean;
         message: string;
         data: UpdateProfileResponse;
-      }>(
-        `${API_BASE_URL}/profile`,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            'Authorization': token ? `Bearer ${token}` : '',
-          },
-          timeout: 30000, // 30 second timeout for file upload
-        }
-      );
+      }>('/profile', data);
       
       console.log('✅ Profile updated successfully');
       console.log('Updated data:', response.data.data);

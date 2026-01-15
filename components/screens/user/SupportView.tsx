@@ -1,5 +1,5 @@
+// components/screens/user/SupportView.tsx
 /* eslint-disable react-native/no-inline-styles */
-//support page
 
 import React, { useEffect, useState } from 'react';
 import {
