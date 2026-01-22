@@ -58,7 +58,7 @@ export default function DrawerHeader({ onClose }: Props) {
       </View>
 
       <Pressable onPress={onClose}>
-        <X size={18} color="#94A3B8" />
+        <X size={24} color="#94A3B8" />
       </Pressable>
     </View>
   );

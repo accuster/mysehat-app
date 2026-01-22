@@ -1,13 +1,22 @@
 // store/slices/memberSlice.ts
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { memberApi, Member, CreateMemberRequest, UpdateMemberRequest } from '../services/memberApi';
+import { 
+  memberApi, 
+  Member, 
+  CreateMemberRequest, 
+  UpdateMemberRequest,
+  UpdateProfileRequest, 
+} from '../services/memberApi';
 
-// Member state interface
+// ✅ UPDATED: Member state interface with profile update state
 export interface MemberState {
   members: Member[];
   isLoading: boolean;
   error: string | null;
   selectedMember: Member | null;
+  // ✅ NEW: Profile update state
+  isUpdatingProfile: boolean;
+  profileUpdateError: string | null;
 }
 
 // Initial state
@@ -16,6 +25,9 @@ const initialState: MemberState = {
   isLoading: false,
   error: null,
   selectedMember: null,
+  // ✅ NEW
+  isUpdatingProfile: false,
+  profileUpdateError: null,
 };
 
 // Async thunks
@@ -112,6 +124,47 @@ export const deleteMember = createAsyncThunk(
   }
 );
 
+// ============================================================================
+// ✅ NEW: Update Profile Thunk
+// ============================================================================
+/**
+ * Update logged-in user's profile (SuperUser)
+ * Handles: fullName, email, age, gender, profileImage
+ */
+export const updateProfile = createAsyncThunk(
+  'members/updateProfile',
+  async (data: UpdateProfileRequest, { rejectWithValue, dispatch }) => {
+    try {
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('👤 Redux: Updating Profile');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('Update data:', data);
+      
+      const updatedProfile = await memberApi.updateProfile(data);
+      
+      console.log('✅ Profile updated successfully');
+      console.log('Updated profile:', updatedProfile);
+      
+      // ✅ After successful profile update, refresh members list
+      // This ensures SuperUser in members list is updated
+      console.log('🔄 Refreshing members list...');
+      await dispatch(fetchMembers());
+      
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('✅ PROFILE UPDATE COMPLETED');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      
+      return updatedProfile;
+    } catch (error: any) {
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.error('❌ ERROR IN PROFILE UPDATE');
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.error('Error:', error.message);
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
 // Slice
 const memberSlice = createSlice({
   name: 'members',
@@ -119,6 +172,7 @@ const memberSlice = createSlice({
   reducers: {
     clearError: (state) => {
       state.error = null;
+      state.profileUpdateError = null; // ✅ Clear profile error too
     },
     setSelectedMember: (state, action: PayloadAction<Member | null>) => {
       state.selectedMember = action.payload;
@@ -127,6 +181,7 @@ const memberSlice = createSlice({
       state.members = [];
       state.error = null;
       state.selectedMember = null;
+      state.profileUpdateError = null; // ✅ Clear profile error
     },
   },
   extraReducers: (builder) => {
@@ -209,6 +264,39 @@ const memberSlice = createSlice({
         console.error('❌ deleteMember: rejected');
         state.isLoading = false;
         state.error = action.payload as string;
+      });
+
+    // ============================================================================
+    // ✅ NEW: Update Profile Reducers
+    // ============================================================================
+    builder
+      .addCase(updateProfile.pending, (state) => {
+        console.log('🔄 updateProfile: pending');
+        state.isUpdatingProfile = true;
+        state.profileUpdateError = null;
+      })
+      .addCase(updateProfile.fulfilled, (state, action) => {
+        console.log('✅ updateProfile: fulfilled');
+        state.isUpdatingProfile = false;
+        
+        // ✅ Update SuperUser in members array with new data
+        const superUserIndex = state.members.findIndex(m => m.userType === 'SuperUser');
+        if (superUserIndex !== -1) {
+          state.members[superUserIndex] = {
+            ...state.members[superUserIndex],
+            name: action.payload.fullName,
+            email: action.payload.email,
+            age: action.payload.age,
+            gender: action.payload.gender as 'Male' | 'Female' | 'Other',
+            profileImage: action.payload.profileImage,
+          };
+        }
+      })
+      .addCase(updateProfile.rejected, (state, action) => {
+        console.error('❌ updateProfile: rejected');
+        console.error('Error:', action.payload);
+        state.isUpdatingProfile = false;
+        state.profileUpdateError = action.payload as string;
       });
   },
 });

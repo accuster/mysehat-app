@@ -1,9 +1,8 @@
 // store/services/memberApi.ts
 import axios, { AxiosInstance } from 'axios';
 import { storage } from '../../utils/storage';
+import { API_BASE_URL } from '../constant';
 
-// API Base URL - Same as your auth API
-const API_BASE_URL = 'https://sandbox.mysehat.ai/api';
 
 // ✅ UPDATED: Member type with email and profileImage
 export interface Member {
@@ -13,7 +12,7 @@ export interface Member {
   gender: 'Male' | 'Female' | 'Other';
   email?: string | null;
   profileImage?: string | null;
-  userType: 'SuperUser' | 'FamilyUser'; 
+  userType: 'SuperUser' | 'FamilyUser';
   createdAt?: string;
   updatedAt?: string;
 }
@@ -66,22 +65,22 @@ class MemberApiService {
 
     // Add request interceptor to attach token
     this.api.interceptors.request.use(
-      async (config) => {
+      async config => {
         const token = await storage.getToken();
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
         return config;
       },
-      (error) => {
+      error => {
         return Promise.reject(error);
-      }
+      },
     );
 
     // Add response interceptor for error handling
     this.api.interceptors.response.use(
-      (response) => response,
-      async (error) => {
+      response => response,
+      async error => {
         const originalRequest = error.config;
 
         // If token expired, try to refresh
@@ -92,10 +91,13 @@ class MemberApiService {
             const refreshToken = await storage.getRefreshToken();
             if (refreshToken) {
               // Call refresh token endpoint (from authApi)
-              const response = await axios.post(`${API_BASE_URL}/wa-auth/refresh-token`, {
-                refreshToken,
-              });
-              
+              const response = await axios.post(
+                `${API_BASE_URL}/wa-auth/refresh-token`,
+                {
+                  refreshToken,
+                },
+              );
+
               const newToken = response.data.accessToken;
               await storage.saveToken(newToken);
               originalRequest.headers.Authorization = `Bearer ${newToken}`;
@@ -109,7 +111,7 @@ class MemberApiService {
         }
 
         return Promise.reject(error);
-      }
+      },
     );
   }
 
@@ -120,13 +122,13 @@ class MemberApiService {
     try {
       console.log('📋 Fetching all family members...');
       console.log('URL:', `${API_BASE_URL}/members`);
-      
+
       const response = await this.api.get<{
         success: boolean;
         count: number;
         members: Member[];
       }>('/members');
-      
+
       console.log('✅ Members fetched:', response.data.count);
       return response.data.members;
     } catch (error: any) {
@@ -147,7 +149,7 @@ class MemberApiService {
         message: string;
         member: Member;
       }>('/members', data);
-      
+
       console.log('✅ Member created:', response.data.member.id);
       return response.data.member;
     } catch (error: any) {
@@ -166,11 +168,34 @@ class MemberApiService {
         success: boolean;
         member: Member;
       }>(`/members/${id}`);
-      
+
       console.log('✅ Member fetched:', response.data.member.name);
       return response.data.member;
     } catch (error: any) {
       console.error('❌ Error fetching member:', error.message);
+      throw this.handleError(error);
+    }
+  }
+
+  /**
+   * Get logged-in user's profile (optimized)
+   * Endpoint: GET /api/profile
+   */
+  async getMyProfile(): Promise<Member> {
+    try {
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('👤 API: Fetching my profile');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+      const response = await this.api.get<{
+        success: boolean;
+        profile: Member;
+      }>('/profile');
+
+      console.log('✅ Profile fetched:', response.data.profile.name);
+      return response.data.profile;
+    } catch (error: any) {
+      console.error('❌ Error fetching profile:', error.message);
       throw this.handleError(error);
     }
   }
@@ -186,7 +211,7 @@ class MemberApiService {
         message: string;
         member: Member;
       }>(`/members/${id}`, data);
-      
+
       console.log('✅ Member updated:', response.data.member.name);
       return response.data.member;
     } catch (error: any) {
@@ -217,43 +242,52 @@ class MemberApiService {
    * Endpoint: PUT /api/profile
    * Uses FormData to upload profile image file
    */
-  async updateProfile(data: UpdateProfileRequest): Promise<UpdateProfileResponse> {
+  async updateProfile(
+    data: UpdateProfileRequest,
+  ): Promise<UpdateProfileResponse> {
     try {
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('👤 API: Updating profile with file upload');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('Request data:', JSON.stringify({ ...data, profileImage: data.profileImage ? 'FILE' : null }, null, 2));
-      
+      console.log(
+        'Request data:',
+        JSON.stringify(
+          { ...data, profileImage: data.profileImage ? 'FILE' : null },
+          null,
+          2,
+        ),
+      );
+
       // ✅ Create FormData for multipart/form-data upload
       const formData = new FormData();
-      
+
       // Add text fields
       if (data.fullName !== undefined) {
         formData.append('fullName', data.fullName);
       }
-      
+
       if (data.email !== undefined && data.email !== null) {
         formData.append('email', data.email);
       }
-      
+
       if (data.age !== undefined) {
         formData.append('age', data.age.toString());
       }
-      
+
       if (data.gender !== undefined) {
         formData.append('gender', data.gender);
       }
-      
+
       // ✅ Add profile image file (if provided)
       if (data.profileImage && data.profileImage !== null) {
         // Extract filename from URI
         const uriParts = data.profileImage.split('/');
         const filename = uriParts[uriParts.length - 1];
-        
+
         // Determine MIME type from file extension
         const extension = filename.split('.').pop()?.toLowerCase();
         let mimeType = 'image/jpeg'; // Default
-        
+
         if (extension === 'png') {
           mimeType = 'image/png';
         } else if (extension === 'jpg' || extension === 'jpeg') {
@@ -263,48 +297,44 @@ class MemberApiService {
         } else if (extension === 'webp') {
           mimeType = 'image/webp';
         }
-        
+
         // ✅ Create file object for upload
         const file = {
           uri: data.profileImage,
           type: mimeType,
           name: filename || 'profile.jpg',
         } as any;
-        
+
         formData.append('profileImage', file);
-        
+
         console.log('📎 Appending image file:', {
           name: file.name,
           type: file.type,
           uri: file.uri.substring(0, 50) + '...',
         });
       }
-      
+
       // Get token for Authorization header
       const token = await storage.getToken();
-      
+
       console.log('📤 Sending FormData request...');
-      
+
       // ✅ Send FormData with multipart/form-data
       const response = await axios.put<{
         success: boolean;
         message: string;
         data: UpdateProfileResponse;
-      }>(
-        `${API_BASE_URL}/profile`,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            'Authorization': token ? `Bearer ${token}` : '',
-          },
-          timeout: 30000, // 30 second timeout for file upload
-        }
-      );
-      
+      }>(`${API_BASE_URL}/profile`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          Authorization: token ? `Bearer ${token}` : '',
+        },
+        timeout: 30000, // 30 second timeout for file upload
+      });
+
       console.log('✅ Profile updated successfully');
       console.log('Updated data:', response.data.data);
-      
+
       return response.data.data;
     } catch (error: any) {
       console.error('❌ Error updating profile:', error.message);
@@ -323,7 +353,9 @@ class MemberApiService {
       return new Error(message);
     } else if (error.request) {
       // Request made but no response
-      return new Error('No response from server. Please check your connection.');
+      return new Error(
+        'No response from server. Please check your connection.',
+      );
     } else {
       // Something else happened
       return new Error(error.message || 'An unexpected error occurred');

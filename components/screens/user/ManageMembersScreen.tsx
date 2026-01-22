@@ -1,6 +1,6 @@
 // components/screens/user/ManageMembersScreen.tsx
 /* eslint-disable radix */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,8 +12,12 @@ import {
   Alert,
   ActivityIndicator,
   TouchableOpacity,
+  BackHandler,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
 import { X, Edit2, Trash2, ArrowLeft, User } from 'lucide-react-native';
 
@@ -28,12 +32,15 @@ import {
 import { RootState, AppDispatch } from '../../../store';
 
 export default function ManageMembersScreen({ navigation }: any) {
+  const isMounted = useRef(true);
+
   const dispatch = useDispatch<AppDispatch>();
   const { members, isLoading, error, selectedMember } = useSelector(
-    (state: RootState) => state.members
+    (state: RootState) => state.members,
   );
-  
+
   const insets = useSafeAreaInsets();
+  const NAME_REGEX = /^[a-zA-Z0-9. ]+$/;
 
   // Form states
   const [showAddForm, setShowAddForm] = useState(false);
@@ -46,11 +53,40 @@ export default function ManageMembersScreen({ navigation }: any) {
   const [nameError, setNameError] = useState('');
   const [ageError, setAgeError] = useState('');
 
-  // Load members on mount
+  // ✅ Setup and cleanup
   useEffect(() => {
-    console.log('🔄 ManageMembersScreen mounted, fetching members...');
+    isMounted.current = true;
+
+    console.log('👥 ManageMembersScreen: Component mounted');
+    console.log('🔄 Fetching members...');
     dispatch(fetchMembers());
+
+    return () => {
+      console.log('🧹 ManageMembersScreen: Unmounting...');
+      isMounted.current = false;
+    };
   }, [dispatch]);
+
+  // ✅ Handle hardware back button
+  useEffect(() => {
+    const backAction = () => {
+      console.log('⬅️ HARDWARE BACK: ManageMembersScreen');
+
+      // ✅ Check if mounted before navigation
+      if (isMounted.current && navigation.canGoBack()) {
+        navigation.goBack();
+        return true;
+      }
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction,
+    );
+
+    return () => backHandler.remove();
+  }, [navigation]);
 
   // Handle errors
   useEffect(() => {
@@ -60,9 +96,16 @@ export default function ManageMembersScreen({ navigation }: any) {
     }
   }, [error, dispatch]);
 
-  // Handle back navigation
+  // ✅ Safe navigation helper
   const handleBack = () => {
-    navigation.goBack();
+    if (!isMounted.current) {
+      console.warn('⚠️ Component unmounted, aborting navigation');
+      return;
+    }
+
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    }
   };
 
   // Reset form
@@ -84,6 +127,13 @@ export default function ManageMembersScreen({ navigation }: any) {
     } else if (name.trim().length < 2) {
       setNameError('Name must be at least 2 characters');
       valid = false;
+    } else if (!NAME_REGEX.test(name.trim())) {
+      setNameError(
+        'Name can only contain letters, numbers, period, and spaces',
+      );
+      valid = false;
+    } else {
+      setNameError('');
     }
 
     const ageNum = parseInt(age);
@@ -93,29 +143,52 @@ export default function ManageMembersScreen({ navigation }: any) {
     } else if (ageNum < 1 || ageNum > 120) {
       setAgeError('Age must be between 1 and 120');
       valid = false;
+    } else {
+      setAgeError('');
     }
 
     return valid;
   };
 
-  // Handle add member
+  // ✅ Handle add member with full safety
   const handleAddMember = async () => {
     if (!validateForm()) return;
 
+    // ✅ Check if mounted before starting
+    if (!isMounted.current) {
+      console.warn('⚠️ Component unmounted, aborting add');
+      return;
+    }
+
     try {
+      console.log('➕ Adding member...');
+
       await dispatch(
         createMember({
           name: name.trim(),
           age: parseInt(age),
           gender,
-        })
+        }),
       ).unwrap();
+
+      // ✅ Check if still mounted after async
+      if (!isMounted.current) {
+        console.warn('⚠️ Component unmounted after member add');
+        return;
+      }
+
+      console.log('✅ Member added successfully');
 
       resetForm();
       setShowAddForm(false);
       Alert.alert('Success', 'Family member added successfully!');
     } catch (err: any) {
-      console.error('Add member error:', err);
+      console.error('❌ Add member error:', err);
+
+      // ✅ Only show alert if mounted
+      if (isMounted.current) {
+        Alert.alert('Error', err.message || 'Failed to add member');
+      }
     }
   };
 
@@ -128,12 +201,20 @@ export default function ManageMembersScreen({ navigation }: any) {
     setShowEditModal(true);
   };
 
-  // Handle update member
+  // ✅ Handle update member with full safety
   const handleUpdateMember = async () => {
     if (!selectedMember) return;
     if (!validateForm()) return;
 
+    // ✅ Check if mounted before starting
+    if (!isMounted.current) {
+      console.warn('⚠️ Component unmounted, aborting update');
+      return;
+    }
+
     try {
+      console.log('✏️ Updating member...');
+
       await dispatch(
         updateMember({
           id: selectedMember.id,
@@ -142,19 +223,32 @@ export default function ManageMembersScreen({ navigation }: any) {
             age: parseInt(age),
             gender,
           },
-        })
+        }),
       ).unwrap();
+
+      // ✅ Check if still mounted after async
+      if (!isMounted.current) {
+        console.warn('⚠️ Component unmounted after member update');
+        return;
+      }
+
+      console.log('✅ Member updated successfully');
 
       resetForm();
       setShowEditModal(false);
       dispatch(setSelectedMember(null));
       Alert.alert('Success', 'Family member updated successfully!');
     } catch (err: any) {
-      console.error('Update member error:', err);
+      console.error('❌ Update member error:', err);
+
+      // ✅ Only show alert if mounted
+      if (isMounted.current) {
+        Alert.alert('Error', err.message || 'Failed to update member');
+      }
     }
   };
 
-  // Handle delete member
+  // ✅ Handle delete member with full safety
   const handleDeleteMember = (member: any) => {
     Alert.alert(
       'Delete Member',
@@ -165,15 +259,37 @@ export default function ManageMembersScreen({ navigation }: any) {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
+            // ✅ Check if mounted before starting
+            if (!isMounted.current) {
+              console.warn('⚠️ Component unmounted, aborting delete');
+              return;
+            }
+
             try {
+              console.log('🗑️ Deleting member:', member.id);
+
               await dispatch(deleteMember(member.id)).unwrap();
+
+              // ✅ Check if still mounted after async
+              if (!isMounted.current) {
+                console.warn('⚠️ Component unmounted after member delete');
+                return;
+              }
+
+              console.log('✅ Member deleted successfully');
+
               Alert.alert('Success', 'Family member deleted successfully!');
             } catch (err: any) {
-              console.error('Delete member error:', err);
+              console.error('❌ Delete member error:', err);
+
+              // ✅ Only show alert if mounted
+              if (isMounted.current) {
+                Alert.alert('Error', err.message || 'Failed to delete member');
+              }
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -191,7 +307,12 @@ export default function ManageMembersScreen({ navigation }: any) {
       </View>
 
       {/* CONTENT */}
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: contentBottomPadding }]}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: contentBottomPadding },
+        ]}
+      >
         {/* LOADING STATE */}
         {isLoading && members.length === 0 && (
           <View style={styles.loadingContainer}>
@@ -211,22 +332,23 @@ export default function ManageMembersScreen({ navigation }: any) {
         )}
 
         {/* MEMBERS LIST */}
-        {members.map((member) => {
+        {members.map(member => {
           const isSuperUser = member.userType === 'SuperUser';
-          
+
           return (
             <View key={member.id} style={styles.memberCard}>
-              {/* Icon Container - Distinct for Super User */}
-              <View style={[
-                styles.iconContainer,
-                isSuperUser && styles.iconContainerSuperUser
-              ]}>
-                <User 
-                  size={24} 
-                  color={isSuperUser ? '#FBBF24' : '#8B5CF6'} 
-                  strokeWidth={2.5} 
+              {/* Icon Container */}
+              <View
+                style={[
+                  styles.iconContainer,
+                  isSuperUser && styles.iconContainerSuperUser,
+                ]}
+              >
+                <User
+                  size={24}
+                  color={isSuperUser ? '#FBBF24' : '#8B5CF6'}
+                  strokeWidth={2.5}
                 />
-                {/* Crown indicator for Super User */}
                 {isSuperUser && (
                   <View style={styles.crownBadge}>
                     <Text style={styles.crownIcon}>👑</Text>
@@ -248,7 +370,6 @@ export default function ManageMembersScreen({ navigation }: any) {
                 </Text>
               </View>
 
-              {/* Show edit button for ALL users */}
               <View style={styles.memberActions}>
                 <Pressable
                   style={styles.actionBtn}
@@ -257,7 +378,6 @@ export default function ManageMembersScreen({ navigation }: any) {
                   <Edit2 size={18} color="#3B82F6" strokeWidth={2.5} />
                 </Pressable>
 
-                {/* Only show delete button for FamilyUser */}
                 {!isSuperUser && (
                   <Pressable
                     style={[styles.actionBtn, styles.deleteBtn]}
@@ -272,10 +392,7 @@ export default function ManageMembersScreen({ navigation }: any) {
         })}
 
         {/* ADD FAMILY MEMBER BUTTON */}
-        <Pressable
-          style={styles.addBtn}
-          onPress={() => setShowAddForm(true)}
-        >
+        <Pressable style={styles.addBtn} onPress={() => setShowAddForm(true)}>
           <Text style={styles.addText}>+ Add Family Member</Text>
         </Pressable>
       </ScrollView>
@@ -310,35 +427,43 @@ export default function ManageMembersScreen({ navigation }: any) {
                 placeholder="Enter full name"
                 placeholderTextColor="#71717A"
                 value={name}
-                onChangeText={(text) => {
-                  setName(text);
+                onChangeText={text => {
+                  const filtered = text.replace(/[^a-zA-Z0-9. ]/g, '');
+                  setName(filtered);
                   setNameError('');
                 }}
                 style={[styles.input, nameError && styles.inputError]}
+                editable={!isLoading}
               />
-              {nameError ? <Text style={styles.errorText}>{nameError}</Text> : null}
+              {nameError ? (
+                <Text style={styles.errorText}>{nameError}</Text>
+              ) : null}
 
               <Text style={styles.label}>Age *</Text>
               <TextInput
                 placeholder="Enter age"
                 placeholderTextColor="#71717A"
                 value={age}
-                onChangeText={(text) => {
+                onChangeText={text => {
                   setAge(text.replace(/[^0-9]/g, ''));
                   setAgeError('');
                 }}
                 keyboardType="number-pad"
                 maxLength={3}
                 style={[styles.input, ageError && styles.inputError]}
+                editable={!isLoading}
               />
-              {ageError ? <Text style={styles.errorText}>{ageError}</Text> : null}
+              {ageError ? (
+                <Text style={styles.errorText}>{ageError}</Text>
+              ) : null}
 
               <Text style={styles.label}>Gender *</Text>
               <View style={styles.genderRow}>
-                {(['Male', 'Female', 'Other'] as const).map((g) => (
+                {(['Male', 'Female', 'Other'] as const).map(g => (
                   <Pressable
                     key={g}
                     onPress={() => setGender(g)}
+                    disabled={isLoading}
                     style={[
                       styles.genderBtn,
                       gender === g && styles.genderActive,
@@ -404,35 +529,43 @@ export default function ManageMembersScreen({ navigation }: any) {
                 placeholder="Enter full name"
                 placeholderTextColor="#71717A"
                 value={name}
-                onChangeText={(text) => {
-                  setName(text);
+                onChangeText={text => {
+                  const filtered = text.replace(/[^a-zA-Z0-9. ]/g, '');
+                  setName(filtered);
                   setNameError('');
                 }}
                 style={[styles.input, nameError && styles.inputError]}
+                editable={!isLoading}
               />
-              {nameError ? <Text style={styles.errorText}>{nameError}</Text> : null}
+              {nameError ? (
+                <Text style={styles.errorText}>{nameError}</Text>
+              ) : null}
 
               <Text style={styles.label}>Age *</Text>
               <TextInput
                 placeholder="Enter age"
                 placeholderTextColor="#71717A"
                 value={age}
-                onChangeText={(text) => {
+                onChangeText={text => {
                   setAge(text.replace(/[^0-9]/g, ''));
                   setAgeError('');
                 }}
                 keyboardType="number-pad"
                 maxLength={3}
                 style={[styles.input, ageError && styles.inputError]}
+                editable={!isLoading}
               />
-              {ageError ? <Text style={styles.errorText}>{ageError}</Text> : null}
+              {ageError ? (
+                <Text style={styles.errorText}>{ageError}</Text>
+              ) : null}
 
               <Text style={styles.label}>Gender *</Text>
               <View style={styles.genderRow}>
-                {(['Male', 'Female', 'Other'] as const).map((g) => (
+                {(['Male', 'Female', 'Other'] as const).map(g => (
                   <Pressable
                     key={g}
                     onPress={() => setGender(g)}
+                    disabled={isLoading}
                     style={[
                       styles.genderBtn,
                       gender === g && styles.genderActive,
@@ -476,7 +609,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0A0A0A',
   },
-  
+
   header: {
     height: 56,
     flexDirection: 'row',
@@ -501,7 +634,7 @@ const styles = StyleSheet.create({
   placeholder: {
     width: 40,
   },
-  
+
   content: {
     padding: 16,
   },
@@ -541,24 +674,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#27272A',
   },
-  // ✅ Regular member icon
   iconContainer: {
     width: 48,
     height: 48,
     borderRadius: 14,
-    backgroundColor: 'rgba(139, 92, 246, 0.15)', // Purple tint
+    backgroundColor: 'rgba(139, 92, 246, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14,
     position: 'relative',
   },
-  // ✅ Super User icon - distinct with golden gradient
   iconContainerSuperUser: {
-    backgroundColor: 'rgba(251, 191, 36, 0.15)', // Golden tint
+    backgroundColor: 'rgba(251, 191, 36, 0.15)',
     borderWidth: 2,
-    borderColor: 'rgba(251, 191, 36, 0.3)', // Golden border
+    borderColor: 'rgba(251, 191, 36, 0.3)',
   },
-  // ✅ Crown badge for Super User
   crownBadge: {
     position: 'absolute',
     top: -4,
@@ -590,13 +720,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   superUserBadge: {
-    backgroundColor: '#FBBF24', // ✅ Golden badge
+    backgroundColor: '#FBBF24',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
   },
   superUserText: {
-    color: '#18181B', // ✅ Dark text on golden background
+    color: '#18181B',
     fontSize: 10,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -633,7 +763,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
 
-  // Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.85)',

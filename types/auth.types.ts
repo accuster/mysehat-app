@@ -56,30 +56,5 @@ export interface CompleteProfileResponse {
   };
 }
 
-export interface WalletInfo {
-  wallet_id: string;
-  balance: number;
-  recent_transactions: Transaction[];
-}
+// =======================================END====================================
 
-export interface Transaction {
-  transaction_id: string;
-  transaction_type: string;
-  credits: number;
-  balance_after: number;
-  razorpay_payment_id?: string;
-  amount_paid?: number;
-  description: string;
-  created_at: string;
-}
-
-export interface FamilyMember {
-  user_id: string;
-  mobile_number: string;
-  full_name: string;
-  age: number;
-  gender: string;
-  user_type: 'FamilyUser';
-  created_at: string;
-  updated_at: string;
-}

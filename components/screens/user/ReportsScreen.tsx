@@ -1,6 +1,7 @@
 // components/screens/user/ReportsScreen.tsx
 /* eslint-disable react-native/no-inline-styles */
-import React, { useState, useEffect } from 'react';
+/* eslint-disable radix */
+import React, { useState, useEffect, useRef  } from 'react';
 import {
   View,
   Text,
@@ -14,18 +15,22 @@ import {
   Modal,
   ScrollView,
   Platform,
+  BackHandler,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { 
-  ArrowLeft, 
-  FileText, 
-  Search, 
-  SlidersHorizontal, 
-  X, 
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
+import {
+  ArrowLeft,
+  FileText,
+  Search,
+  SlidersHorizontal,
+  X,
   Calendar,
   Scale,
   BarChart3,
-  Heart
+  Heart,
 } from 'lucide-react-native';
 import { useAppDispatch, useAppSelector } from '../../../store/hook';
 import { fetchReports } from '../../../store/slices/reportSlice';
@@ -48,23 +53,26 @@ type FilterOptions = {
 
 export default function ReportsScreen({ navigation }: Props) {
   const dispatch = useAppDispatch();
-  
+
+  // ✅ Track if component is mounted
+  const isMounted = useRef(true);
+
   const insets = useSafeAreaInsets();
   const contentBottomPadding = 20 + (insets.bottom > 0 ? insets.bottom : 0);
-  
+
   // Redux state
-  const { reports, isLoading, error } = useAppSelector((state) => state.reports);
-  
+  const { reports, isLoading, error } = useAppSelector(state => state.reports);
+
   // Local state
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredReports, setFilteredReports] = useState(reports);
   const [showFilterModal, setShowFilterModal] = useState(false);
-  
+
   // Date picker states
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
-  
+
   // Filter state
   const [filters, setFilters] = useState<FilterOptions>({
     dateRange: 'all',
@@ -79,11 +87,55 @@ export default function ReportsScreen({ navigation }: Props) {
 
   const [activeFiltersCount, setActiveFiltersCount] = useState(0);
 
-  // Fetch reports on mount
+  // ✅ Fetch reports with cleanup
   useEffect(() => {
+    isMounted.current = true;
+
     console.log('📊 ReportsScreen: Component mounted');
     dispatch(fetchReports());
+
+    return () => {
+      console.log('🧹 ReportsScreen: Unmounting...');
+      isMounted.current = false;
+    };
   }, [dispatch]);
+
+    // ✅ Handle hardware back button
+  useEffect(() => {
+    console.log('✅ Setting up BackHandler for ReportsScreen');
+    
+    const backAction = () => {
+      console.log('⬅️ HARDWARE BACK PRESSED IN REPORTSSCREEN');
+      
+      // Check if mounted
+      if (!isMounted.current) {
+        console.warn('⚠️ Component unmounted, aborting navigation');
+        return false;
+      }
+      
+      // Check if can go back
+      if (navigation.canGoBack()) {
+        console.log('✅ Safe to navigate back');
+        navigation.goBack();
+        return true; // We handled it
+      }
+      
+      console.log('ℹ️ Cannot go back, letting Android handle');
+      return false; // Let Android handle
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction
+    );
+
+    console.log('✅ BackHandler registered successfully');
+
+    return () => {
+      console.log('🧹 Removing BackHandler');
+      backHandler.remove();
+    };
+  }, [navigation]);
 
   // Apply filters and search
   useEffect(() => {
@@ -92,7 +144,7 @@ export default function ReportsScreen({ navigation }: Props) {
     // Apply search filter
     if (searchQuery.trim() !== '') {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter((report) => {
+      filtered = filtered.filter(report => {
         return (
           report.user_name.toLowerCase().includes(query) ||
           report.report_id.toLowerCase().includes(query) ||
@@ -102,11 +154,14 @@ export default function ReportsScreen({ navigation }: Props) {
     }
 
     // Apply date filter
-    if (filters.dateRange === 'custom' && (filters.startDate || filters.endDate)) {
-      filtered = filtered.filter((report) => {
+    if (
+      filters.dateRange === 'custom' &&
+      (filters.startDate || filters.endDate)
+    ) {
+      filtered = filtered.filter(report => {
         const reportDate = new Date(report.report_date);
         reportDate.setHours(0, 0, 0, 0);
-        
+
         if (filters.startDate && filters.endDate) {
           const start = new Date(filters.startDate);
           start.setHours(0, 0, 0, 0);
@@ -126,9 +181,9 @@ export default function ReportsScreen({ navigation }: Props) {
       });
     } else if (filters.dateRange !== 'all' && filters.dateRange !== 'custom') {
       const now = new Date();
-      filtered = filtered.filter((report) => {
+      filtered = filtered.filter(report => {
         const reportDate = new Date(report.report_date);
-        
+
         switch (filters.dateRange) {
           case 'today':
             return reportDate.toDateString() === now.toDateString();
@@ -149,15 +204,19 @@ export default function ReportsScreen({ navigation }: Props) {
 
     // Apply BMI type filter
     if (filters.bmiType !== 'all') {
-      filtered = filtered.filter((report) => report.vitals.bmi_status === filters.bmiType);
+      filtered = filtered.filter(
+        report => report.vitals.bmi_status === filters.bmiType,
+      );
     }
 
     // Apply BMI value range filter
     if (filters.bmiValueMin !== '' || filters.bmiValueMax !== '') {
-      filtered = filtered.filter((report) => {
+      filtered = filtered.filter(report => {
         const bmi = report.vitals.bmi;
-        const min = filters.bmiValueMin !== '' ? parseFloat(filters.bmiValueMin) : 0;
-        const max = filters.bmiValueMax !== '' ? parseFloat(filters.bmiValueMax) : 999;
+        const min =
+          filters.bmiValueMin !== '' ? parseFloat(filters.bmiValueMin) : 0;
+        const max =
+          filters.bmiValueMax !== '' ? parseFloat(filters.bmiValueMax) : 999;
         return bmi >= min && bmi <= max;
       });
     }
@@ -165,10 +224,10 @@ export default function ReportsScreen({ navigation }: Props) {
     // Apply health score filter
     if (filters.healthScoreOperator !== 'all') {
       const targetScore = parseInt(filters.healthScoreValue);
-      filtered = filtered.filter((report) => {
+      filtered = filtered.filter(report => {
         const score = report.vitals.health_score;
-        return filters.healthScoreOperator === 'greater' 
-          ? score >= targetScore 
+        return filters.healthScoreOperator === 'greater'
+          ? score >= targetScore
           : score < targetScore;
       });
     }
@@ -184,17 +243,28 @@ export default function ReportsScreen({ navigation }: Props) {
     setActiveFiltersCount(count);
   }, [searchQuery, reports, filters]);
 
-  // Handle pull-to-refresh
+  // ✅ Handle pull-to-refresh with isMounted check
   const onRefresh = async () => {
     console.log('🔄 ReportsScreen: Refreshing reports...');
     setRefreshing(true);
     await dispatch(fetchReports());
-    setRefreshing(false);
+
+    // ✅ CHECK BEFORE setState
+    if (isMounted.current) {
+      setRefreshing(false);
+    }
   };
 
-  // Handle back navigation
+  // // Handle back navigation
+  // const handleBack = () => {
+  //   navigation.goBack();
+  // };
+
+  // ✅ Handle back navigation with check
   const handleBack = () => {
-    navigation.goBack();
+    if (isMounted.current && navigation.canGoBack()) {
+      navigation.goBack();
+    }
   };
 
   // Handle filter button press
@@ -204,8 +274,8 @@ export default function ReportsScreen({ navigation }: Props) {
 
   // Handle date range change
   const handleDateRangeChange = (value: any) => {
-    setFilters({ 
-      ...filters, 
+    setFilters({
+      ...filters,
       dateRange: value,
       startDate: value === 'custom' ? filters.startDate : null,
       endDate: value === 'custom' ? filters.endDate : null,
@@ -250,13 +320,15 @@ export default function ReportsScreen({ navigation }: Props) {
   // Handle download - Navigate to InstantReport
   const handleDownload = (item: any) => {
     console.log('📥 Opening report:', item.report_id);
-    
+
     const reportData = {
-      timestamp: formatDate(item.report_date) + ' ' + formatTime(item.report_date),
+      timestamp:
+        formatDate(item.report_date) + ' ' + formatTime(item.report_date),
       reportId: item.report_id,
       patientName: item.user_name,
       age: item.age,
-      gender: item.gender === 'Male' ? 'M' : item.gender === 'Female' ? 'F' : 'O',
+      gender:
+        item.gender === 'Male' ? 'M' : item.gender === 'Female' ? 'F' : 'O',
       heightCm: item.vitals.height,
       weightKg: item.vitals.weight,
       bmi: item.vitals.bmi,
@@ -267,27 +339,27 @@ export default function ReportsScreen({ navigation }: Props) {
       leanBodyMassKg: item.vitals.lean_body_mass,
       healthScore: item.vitals.health_score,
     };
-    
+
     navigation.navigate('Report', { data: reportData });
   };
 
   // Format date for display
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-GB', { 
-      day: 'numeric', 
-      month: 'short', 
-      year: 'numeric' 
+    return date.toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
     });
   };
 
   // Format time for display
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
       minute: '2-digit',
-      hour12: true 
+      hour12: true,
     });
   };
 
@@ -430,24 +502,35 @@ export default function ReportsScreen({ navigation }: Props) {
               />
             }
             renderItem={({ item }) => {
-              const bmiColor = 
-                item.vitals.bmi_status === 'Normal' ? '#10B981' :
-                item.vitals.bmi_status === 'Underweight' ? '#3B82F6' :
-                item.vitals.bmi_status === 'Overweight' ? '#F59E0B' :
-                '#EF4444';
+              const bmiColor =
+                item.vitals.bmi_status === 'Normal'
+                  ? '#10B981'
+                  : item.vitals.bmi_status === 'Underweight'
+                  ? '#3B82F6'
+                  : item.vitals.bmi_status === 'Overweight'
+                  ? '#F59E0B'
+                  : '#EF4444';
 
-              const bmiIconBg = 
-                item.vitals.bmi_status === 'Normal' ? 'rgba(16, 185, 129, 0.15)' :
-                item.vitals.bmi_status === 'Underweight' ? 'rgba(59, 130, 246, 0.15)' :
-                item.vitals.bmi_status === 'Overweight' ? 'rgba(245, 158, 11, 0.15)' :
-                'rgba(239, 68, 68, 0.15)';
+              const bmiIconBg =
+                item.vitals.bmi_status === 'Normal'
+                  ? 'rgba(16, 185, 129, 0.15)'
+                  : item.vitals.bmi_status === 'Underweight'
+                  ? 'rgba(59, 130, 246, 0.15)'
+                  : item.vitals.bmi_status === 'Overweight'
+                  ? 'rgba(245, 158, 11, 0.15)'
+                  : 'rgba(239, 68, 68, 0.15)';
 
               return (
                 <Pressable
                   style={styles.card}
                   onPress={() => handleDownload(item)}
                 >
-                  <View style={[styles.iconContainer, { backgroundColor: bmiIconBg }]}>
+                  <View
+                    style={[
+                      styles.iconContainer,
+                      { backgroundColor: bmiIconBg },
+                    ]}
+                  >
                     <FileText size={24} color={bmiColor} strokeWidth={2.5} />
                   </View>
 
@@ -456,17 +539,24 @@ export default function ReportsScreen({ navigation }: Props) {
                       {item.user_name}, {item.gender}/{item.age}
                     </Text>
                     <Text style={styles.meta}>
-                      H: {item.vitals.height} cm • W: {item.vitals.weight} kg • BMI: {item.vitals.bmi.toFixed(1)} • <Text style={{ color: bmiColor }}>{item.vitals.bmi_status}</Text>
+                      H: {item.vitals.height} cm • W: {item.vitals.weight} kg •
+                      BMI: {item.vitals.bmi.toFixed(1)} •{' '}
+                      <Text style={{ color: bmiColor }}>
+                        {item.vitals.bmi_status}
+                      </Text>
                     </Text>
                     <Text style={styles.date}>
-                      {formatDate(item.report_date)} • {formatTime(item.report_date)}
+                      {formatDate(item.report_date)} •{' '}
+                      {formatTime(item.report_date)}
                     </Text>
-                    <Text style={styles.reportId}>Report ID: {item.report_id}</Text>
+                    <Text style={styles.reportId}>
+                      Report ID: {item.report_id}
+                    </Text>
                   </View>
 
                   <TouchableOpacity
                     style={styles.downloadBtn}
-                    onPress={(e) => {
+                    onPress={e => {
                       e.stopPropagation();
                       handleDownload(item);
                     }}
@@ -511,19 +601,21 @@ export default function ReportsScreen({ navigation }: Props) {
                     { label: 'Last 30 Days', value: 'month' },
                     { label: 'Last Year', value: 'year' },
                     { label: 'Custom Range', value: 'custom' },
-                  ].map((option) => (
+                  ].map(option => (
                     <TouchableOpacity
                       key={option.value}
                       style={[
                         styles.filterOption,
-                        filters.dateRange === option.value && styles.filterOptionActive,
+                        filters.dateRange === option.value &&
+                          styles.filterOptionActive,
                       ]}
                       onPress={() => handleDateRangeChange(option.value)}
                     >
                       <Text
                         style={[
                           styles.filterOptionText,
-                          filters.dateRange === option.value && styles.filterOptionTextActive,
+                          filters.dateRange === option.value &&
+                            styles.filterOptionTextActive,
                         ]}
                       >
                         {option.label}
@@ -577,19 +669,23 @@ export default function ReportsScreen({ navigation }: Props) {
                     { label: 'Normal', value: 'Normal' },
                     { label: 'Overweight', value: 'Overweight' },
                     { label: 'Obese', value: 'Obese' },
-                  ].map((option) => (
+                  ].map(option => (
                     <TouchableOpacity
                       key={option.value}
                       style={[
                         styles.filterOption,
-                        filters.bmiType === option.value && styles.filterOptionActive,
+                        filters.bmiType === option.value &&
+                          styles.filterOptionActive,
                       ]}
-                      onPress={() => setFilters({ ...filters, bmiType: option.value as any })}
+                      onPress={() =>
+                        setFilters({ ...filters, bmiType: option.value as any })
+                      }
                     >
                       <Text
                         style={[
                           styles.filterOptionText,
-                          filters.bmiType === option.value && styles.filterOptionTextActive,
+                          filters.bmiType === option.value &&
+                            styles.filterOptionTextActive,
                         ]}
                       >
                         {option.label}
@@ -613,7 +709,9 @@ export default function ReportsScreen({ navigation }: Props) {
                       placeholder="e.g., 18.5"
                       placeholderTextColor="#71717A"
                       value={filters.bmiValueMin}
-                      onChangeText={(text) => setFilters({ ...filters, bmiValueMin: text })}
+                      onChangeText={text =>
+                        setFilters({ ...filters, bmiValueMin: text })
+                      }
                       keyboardType="decimal-pad"
                     />
                   </View>
@@ -625,7 +723,9 @@ export default function ReportsScreen({ navigation }: Props) {
                       placeholder="e.g., 24.9"
                       placeholderTextColor="#71717A"
                       value={filters.bmiValueMax}
-                      onChangeText={(text) => setFilters({ ...filters, bmiValueMax: text })}
+                      onChangeText={text =>
+                        setFilters({ ...filters, bmiValueMax: text })
+                      }
                       keyboardType="decimal-pad"
                     />
                   </View>
@@ -638,25 +738,32 @@ export default function ReportsScreen({ navigation }: Props) {
                   <Heart size={18} color="#F59E0B" strokeWidth={2.5} />
                   <Text style={styles.filterLabel}>Health Score</Text>
                 </View>
-                
+
                 <View style={styles.filterOptions}>
                   {[
                     { label: 'All Scores', value: 'all' },
                     { label: 'Greater Than', value: 'greater' },
                     { label: 'Less Than', value: 'less' },
-                  ].map((option) => (
+                  ].map(option => (
                     <TouchableOpacity
                       key={option.value}
                       style={[
                         styles.filterOption,
-                        filters.healthScoreOperator === option.value && styles.filterOptionActive,
+                        filters.healthScoreOperator === option.value &&
+                          styles.filterOptionActive,
                       ]}
-                      onPress={() => setFilters({ ...filters, healthScoreOperator: option.value as any })}
+                      onPress={() =>
+                        setFilters({
+                          ...filters,
+                          healthScoreOperator: option.value as any,
+                        })
+                      }
                     >
                       <Text
                         style={[
                           styles.filterOptionText,
-                          filters.healthScoreOperator === option.value && styles.filterOptionTextActive,
+                          filters.healthScoreOperator === option.value &&
+                            styles.filterOptionTextActive,
                         ]}
                       >
                         {option.label}
@@ -672,19 +779,26 @@ export default function ReportsScreen({ navigation }: Props) {
                       { label: '50%', value: '50' },
                       { label: '75%', value: '75' },
                       { label: '100%', value: '100' },
-                    ].map((option) => (
+                    ].map(option => (
                       <TouchableOpacity
                         key={option.value}
                         style={[
                           styles.filterOption,
-                          filters.healthScoreValue === option.value && styles.filterOptionActive,
+                          filters.healthScoreValue === option.value &&
+                            styles.filterOptionActive,
                         ]}
-                        onPress={() => setFilters({ ...filters, healthScoreValue: option.value as any })}
+                        onPress={() =>
+                          setFilters({
+                            ...filters,
+                            healthScoreValue: option.value as any,
+                          })
+                        }
                       >
                         <Text
                           style={[
                             styles.filterOptionText,
-                            filters.healthScoreValue === option.value && styles.filterOptionTextActive,
+                            filters.healthScoreValue === option.value &&
+                              styles.filterOptionTextActive,
                           ]}
                         >
                           {option.label}
@@ -744,7 +858,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0A0A0A',
   },
-  
+
   header: {
     height: 56,
     flexDirection: 'row',
@@ -828,12 +942,12 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
   },
-  
+
   content: {
     flex: 1,
     padding: 16,
   },
-  
+
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -895,7 +1009,7 @@ const styles = StyleSheet.create({
     color: '#71717A',
     fontSize: 14,
   },
-  
+
   card: {
     backgroundColor: '#18181B',
     borderRadius: 16,

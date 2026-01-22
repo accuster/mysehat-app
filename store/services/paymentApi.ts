@@ -1,8 +1,8 @@
 // store/services/paymentApi.ts
 import axios, { AxiosInstance } from 'axios';
 import { storage } from '../../utils/storage';
+import { API_BASE_URL } from '../constant';
 
-const API_BASE_URL = 'https://sandbox.mysehat.ai/api';
 
 interface PaymentResponse {
   success: boolean;

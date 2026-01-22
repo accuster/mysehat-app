@@ -11,6 +11,7 @@ import {
   Linking,
   ActivityIndicator,
   AppState,
+  BackHandler,
 } from 'react-native';
 import {
   Camera,
@@ -21,7 +22,7 @@ import {
 import { Animated, Easing } from 'react-native';
 import { useRef } from 'react';
 import { Vibration, Platform } from 'react-native';
-import { Flashlight, FlashlightOff, ArrowLeft } from 'lucide-react-native'; // ✅ Add ArrowLeft
+import { Flashlight, FlashlightOff, ArrowLeft } from 'lucide-react-native'; 
 
 // ✅ Redux imports
 import { useAppDispatch, useAppSelector } from '../../../store/hook';
@@ -39,10 +40,12 @@ export default function ScanScreen({ navigation }: Props) {
   const [scannedData, setScannedData] = useState<string | null>(null);
   const [torchOn, setTorchOn] = useState(false);
 
+  const isMounted = useRef(true);
+
   // ✅ REDUX HOOKS
   const dispatch = useAppDispatch();
-  const { isLoading: orderLoading } = useAppSelector((state) => state.orders);
-  const { user } = useAppSelector((state) => state.auth);
+  const { isLoading: orderLoading } = useAppSelector(state => state.orders);
+  const { user } = useAppSelector(state => state.auth);
 
   // ✅ REFS AND ANIMATIONS
   const scanLineAnim = useRef(new Animated.Value(0)).current;
@@ -63,30 +66,30 @@ export default function ScanScreen({ navigation }: Props) {
       console.log('📱 Using user data from Redux');
       return {
         mobile: user.mobile,
-        userId: user.userId
+        userId: user.userId,
       };
     }
-    
+
     // Fallback: Get from storage
     try {
       const storedUser = await storage.getUser();
       console.log('📱 Retrieved from storage:', storedUser);
-      
+
       if (storedUser?.mobile && storedUser?.userId) {
         console.log('✅ Using user data from storage');
         console.log('User ID:', storedUser.userId);
         console.log('Mobile:', storedUser.mobile);
         return {
           mobile: storedUser.mobile,
-          userId: storedUser.userId
+          userId: storedUser.userId,
         };
       }
-      
+
       console.error('❌ Storage user data incomplete:', storedUser);
     } catch (error) {
       console.error('❌ Failed to get user from storage:', error);
     }
-    
+
     throw new Error('User data not found. Please log in again.');
   };
 
@@ -108,13 +111,13 @@ export default function ScanScreen({ navigation }: Props) {
           [
             {
               text: 'OK',
-              onPress: () => navigation.replace('Auth')
-            }
-          ]
+              onPress: () => navigation.replace('Auth'),
+            },
+          ],
         );
       }
     };
-    
+
     checkUser();
   }, []);
 
@@ -145,19 +148,47 @@ export default function ScanScreen({ navigation }: Props) {
         const status = await Camera.getCameraPermissionStatus();
         console.log('📷 Camera permission status:', status);
         setHasPermission(status === 'granted');
-        
+
         if (status === 'granted') {
           console.log('✅ Camera permission granted!');
         }
       }
     };
 
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-    
+    const subscription = AppState.addEventListener(
+      'change',
+      handleAppStateChange,
+    );
+
     return () => {
       subscription.remove();
     };
   }, []);
+
+  useEffect(() => {
+    isMounted.current = true;
+
+    return () => {
+      console.log('🧹 ScanScreen: Unmounting...');
+      isMounted.current = false;
+    };
+  }, []);
+  // ✅ Handle hardware back button
+  useEffect(() => {
+    const backAction = () => {
+      console.log('⬅️ HARDWARE BACK: ScanScreen');
+      if (isMounted.current && navigation.canGoBack()) {
+        navigation.goBack();
+        return true;
+      }
+      return false;
+    };
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction,
+    );
+    return () => backHandler.remove();
+  }, [navigation]);
 
   // ✅ Scan line animation
   useEffect(() => {
@@ -210,7 +241,10 @@ export default function ScanScreen({ navigation }: Props) {
     if (hasTorch && isActive) {
       setTorchOn(!torchOn);
     } else if (!hasTorch) {
-      Alert.alert('Flashlight Not Available', 'Your device does not have a flashlight.');
+      Alert.alert(
+        'Flashlight Not Available',
+        'Your device does not have a flashlight.',
+      );
     }
   };
 
@@ -246,33 +280,44 @@ export default function ScanScreen({ navigation }: Props) {
 
     try {
       const userData = await getUserData();
-      
+
       let encryptedPayload = data;
-      
+
       if (data.includes('SEHAT_BMI')) {
         const match = data.match(/SEHAT_BMI(.+)/);
         if (match && match[1]) {
           encryptedPayload = decodeURIComponent(match[1]);
           console.log('✅ Extracted payload from WhatsApp URL');
-          console.log('Encrypted payload (first 50 chars):', encryptedPayload.substring(0, 50) + '...');
+          console.log(
+            'Encrypted payload (first 50 chars):',
+            encryptedPayload.substring(0, 50) + '...',
+          );
         } else {
           throw new Error('Could not extract payload from WhatsApp URL');
         }
       } else {
         console.log('ℹ️ Direct encrypted payload (not WhatsApp URL)');
       }
-      
+
       console.log('🚀 Sending to backend...');
       console.log('User ID:', userData.userId);
       console.log('Mobile:', userData.mobile);
       console.log('Payload length:', encryptedPayload.length);
 
-      const result = await dispatch(createOrder({
-        timestamp: new Date().toISOString(),
-        raw_payload: encryptedPayload,
-        mobile_number: userData.mobile
-      })).unwrap();
+      const result = await dispatch(
+        createOrder({
+          timestamp: new Date().toISOString(),
+          raw_payload: encryptedPayload,
+          mobile_number: userData.mobile,
+        }),
+      ).unwrap();
 
+      // ✅ CHECK BEFORE navigation
+      if (!isMounted.current) {
+        console.warn('⚠️ Component unmounted, skipping navigation');
+        return;
+      }
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('✅ Order created successfully!');
       console.log('Order ID:', result.order_id);
       console.log('Height:', result.height, 'cm');
@@ -289,18 +334,20 @@ export default function ScanScreen({ navigation }: Props) {
           bmi: result.bmi,
           machine_id: result.machine_id,
           test_fee: result.test_fee,
-          order_id: result.order_id
+          order_id: result.order_id,
         },
         rawData: data,
-        orderId: result.order_id
+        orderId: result.order_id,
       });
-
     } catch (error: any) {
       console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.error('❌ ERROR PROCESSING QR CODE');
       console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.error('Error:', error);
       console.error('Message:', error.message || error);
+
+      // ✅ CHECK BEFORE setState
+      if (!isMounted.current) return;
 
       setScannedData(null);
       setIsActive(true);
@@ -314,16 +361,23 @@ export default function ScanScreen({ navigation }: Props) {
             onPress: () => {
               setScannedData(null);
               setIsActive(true);
-            }
-          }
-        ]
+            },
+          },
+        ],
       );
     }
   };
 
-  // ✅ Handle back navigation
+  // // ✅ Handle back navigation
+  // const handleBack = () => {
+  //   if (navigation.canGoBack()) {
+  //     navigation.goBack();
+  //   }
+  // };
+
+  // ✅ FIX handleBack
   const handleBack = () => {
-    if (navigation.canGoBack()) {
+    if (isMounted.current && navigation.canGoBack()) {
       navigation.goBack();
     }
   };
@@ -412,21 +466,24 @@ export default function ScanScreen({ navigation }: Props) {
               {/* ✅ Torch Button - Below Frame */}
               {hasTorch && (
                 <Pressable
-                  style={[styles.torchButton, torchOn && styles.torchButtonActive]}
+                  style={[
+                    styles.torchButton,
+                    torchOn && styles.torchButtonActive,
+                  ]}
                   onPress={toggleTorch}
                   disabled={!isActive}
                 >
                   {torchOn ? (
-                    <Flashlight 
-                      size={24} 
-                      color="#FFFFFF" 
+                    <Flashlight
+                      size={24}
+                      color="#FFFFFF"
                       strokeWidth={2.5}
                       fill="#FFFFFF"
                     />
                   ) : (
-                    <FlashlightOff 
-                      size={24} 
-                      color="#FFFFFF" 
+                    <FlashlightOff
+                      size={24}
+                      color="#FFFFFF"
                       strokeWidth={2.5}
                     />
                   )}

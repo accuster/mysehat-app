@@ -1,7 +1,7 @@
 // components/screens/auth/CompleteProfileScreen.tsx
 /* eslint-disable radix */
 /* eslint-disable react-native/no-inline-styles */
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
   Platform,
   Modal,
   Alert,
+  BackHandler,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { completeProfile } from '../../../store/slices/authSlice';
@@ -26,6 +27,9 @@ type Props = {
 };
 
 export default function CompleteProfileScreen({ navigation }: Props) {
+  // ✅ Add isMounted ref
+  const isMounted = useRef(true);
+  
   const dispatch = useDispatch<AppDispatch>();
   const { isLoading, error } = useSelector((state: RootState) => state.auth);
 
@@ -37,7 +41,83 @@ export default function CompleteProfileScreen({ navigation }: Props) {
   const [ageError, setAgeError] = useState('');
   const [genderError, setGenderError] = useState('');
 
+  // ✅ Track if user has entered any data
+  const hasEnteredData = fullName.trim().length > 0 || age.length > 0 || gender !== '';
+
+  // ✅ Setup and cleanup
+  useEffect(() => {
+    isMounted.current = true;
+    
+    console.log('📝 CompleteProfileScreen: Component mounted');
+
+    return () => {
+      console.log('🧹 CompleteProfileScreen: Unmounting...');
+      isMounted.current = false;
+      
+      if (isLoading) {
+        console.warn('⚠️ Component unmounted during profile completion');
+      }
+    };
+  }, []);
+
+  // ✅ Handle hardware back button
+  useEffect(() => {
+    const backAction = () => {
+      console.log('⬅️ HARDWARE BACK: CompleteProfileScreen');
+      
+      // ✅ Block back during profile submission
+      if (isLoading) {
+        Alert.alert(
+          'Completing Profile',
+          'Please wait while we complete your profile.',
+          [{ text: 'OK' }]
+        );
+        return true; // Prevent default back
+      }
+      
+      // ✅ Ask for confirmation if data entered
+      if (hasEnteredData) {
+        Alert.alert(
+          'Discard Profile?',
+          'You will need to login again. Are you sure you want to go back?',
+          [
+            {
+              text: 'Stay',
+              style: 'cancel',
+            },
+            {
+              text: 'Discard',
+              style: 'destructive',
+              onPress: () => {
+                if (isMounted.current) {
+                  navigation.goBack();
+                }
+              },
+            },
+          ]
+        );
+        return true; // Prevent default back
+      }
+      
+      // ✅ Allow back if no data entered
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction
+    );
+
+    return () => backHandler.remove();
+  }, [navigation, hasEnteredData, isLoading]);
+
   const handleSubmit = async () => {
+    // ✅ Check if mounted
+    if (!isMounted.current) {
+      console.warn('⚠️ Component unmounted, aborting submit');
+      return;
+    }
+    
     // Validate
     let hasError = false;
 
@@ -66,6 +146,8 @@ export default function CompleteProfileScreen({ navigation }: Props) {
     if (hasError) return;
 
     try {
+      console.log('📤 Completing profile...');
+      
       const resultAction = await dispatch(
         completeProfile({
           fullName: fullName.trim(),
@@ -74,14 +156,26 @@ export default function CompleteProfileScreen({ navigation }: Props) {
         }),
       );
 
+      // ✅ Check if still mounted after async
+      if (!isMounted.current) {
+        console.warn('⚠️ Component unmounted after profile completion');
+        return;
+      }
+
       if (completeProfile.fulfilled.match(resultAction)) {
+        console.log('✅ Profile completed successfully');
+        
         Alert.alert(
           'Success!',
           'Your profile has been completed successfully. You received free credits!',
           [
             {
               text: 'Continue',
-              onPress: () => navigation.replace('App'),
+              onPress: () => {
+                if (isMounted.current) {
+                  navigation.replace('App');
+                }
+              },
             },
           ],
         );
@@ -89,7 +183,12 @@ export default function CompleteProfileScreen({ navigation }: Props) {
         throw new Error('Failed to complete profile');
       }
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to complete profile');
+      console.error('❌ Profile completion error:', err);
+      
+      // ✅ Only show alert if mounted
+      if (isMounted.current) {
+        Alert.alert('Error', err.message || 'Failed to complete profile');
+      }
     }
   };
 
@@ -145,6 +244,7 @@ export default function CompleteProfileScreen({ navigation }: Props) {
             placeholder="Enter your full name"
             placeholderTextColor="#6B7280"
             style={[styles.input, nameError && styles.inputError]}
+            editable={!isLoading}
           />
           {nameError ? <Text style={styles.errorText}>{nameError}</Text> : null}
 
@@ -161,6 +261,7 @@ export default function CompleteProfileScreen({ navigation }: Props) {
             keyboardType="number-pad"
             maxLength={3}
             style={[styles.input, ageError && styles.inputError]}
+            editable={!isLoading}
           />
           {ageError ? <Text style={styles.errorText}>{ageError}</Text> : null}
 
@@ -172,9 +273,11 @@ export default function CompleteProfileScreen({ navigation }: Props) {
                 setGender('Male');
                 setGenderError('');
               }}
+              disabled={isLoading}
               style={[
                 styles.genderBtn,
                 gender === 'Male' && styles.genderBtnActive,
+                isLoading && styles.btnDisabled,
               ]}
             >
               <Text
@@ -192,9 +295,11 @@ export default function CompleteProfileScreen({ navigation }: Props) {
                 setGender('Female');
                 setGenderError('');
               }}
+              disabled={isLoading}
               style={[
                 styles.genderBtn,
                 gender === 'Female' && styles.genderBtnActive,
+                isLoading && styles.btnDisabled,
               ]}
             >
               <Text
@@ -212,9 +317,11 @@ export default function CompleteProfileScreen({ navigation }: Props) {
                 setGender('Other');
                 setGenderError('');
               }}
+              disabled={isLoading}
               style={[
                 styles.genderBtn,
                 gender === 'Other' && styles.genderBtnActive,
+                isLoading && styles.btnDisabled,
               ]}
             >
               <Text
@@ -239,14 +346,6 @@ export default function CompleteProfileScreen({ navigation }: Props) {
           >
             <Text style={styles.submitBtnText}>Complete Profile</Text>
           </Pressable>
-
-          {/* Skip Button (Optional) */}
-          {/* <Pressable
-            onPress={() => navigation.replace('App')}
-            style={styles.skipBtn}
-          >
-            <Text style={styles.skipText}>Skip for now</Text>
-          </Pressable> */}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

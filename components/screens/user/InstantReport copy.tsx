@@ -1,4 +1,4 @@
-// components/screens/user/InstantReport.tsx - FIXED: Share button now generates and shares PDF
+// components/screens/user/InstantReport.tsx - WITH NOTIFICATIONS
 import React, {
   useMemo,
   useState,
@@ -19,7 +19,6 @@ import {
   Alert,
   ActivityIndicator,
   BackHandler,
-  Animated,
 } from 'react-native';
 import { ArrowLeft, Share2, Download } from 'lucide-react-native';
 import {
@@ -62,12 +61,8 @@ export default function InstantReport({ route, navigation }: Props) {
   const isMounted = useRef(true);
   const isGeneratingRef = useRef(false);
 
-  // ✅ Animation ref for share button blink
-  const shareBlinkAnim = useRef(new Animated.Value(1)).current;
-
   const [isGenerating, setIsGenerating] = useState(false);
   const [pdfPath, setPdfPath] = useState<string | null>(null);
-  const [isSharing, setIsSharing] = useState(false); // ✅ Track sharing state
 
   const insets = useSafeAreaInsets();
 
@@ -101,11 +96,11 @@ export default function InstantReport({ route, navigation }: Props) {
   const handleBack = useCallback(() => {
     console.log('⬅️ handleBack called');
 
-    if (isGenerating || isSharing) {
-      console.warn('⚠️ Cannot navigate back - PDF is generating/sharing');
+    if (isGenerating) {
+      console.warn('⚠️ Cannot navigate back - PDF is generating');
       Alert.alert(
         'Please Wait',
-        'PDF is being processed. Please wait for it to complete.',
+        'PDF is being generated. Please wait for it to complete.',
         [{ text: 'OK' }],
       );
       return;
@@ -126,7 +121,7 @@ export default function InstantReport({ route, navigation }: Props) {
     } catch (error) {
       console.error('❌ Navigation error:', error);
     }
-  }, [navigation, isGenerating, isSharing]);
+  }, [navigation, isGenerating]);
 
   // ✅ Hardware back button handler
   useEffect(() => {
@@ -137,14 +132,18 @@ export default function InstantReport({ route, navigation }: Props) {
       console.log('⬅️ HARDWARE BACK PRESSED: InstantReport');
       console.log('Current state:', {
         isGenerating,
-        isSharing,
         isGeneratingRef: isGeneratingRef.current,
         isMounted: isMounted.current,
       });
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-      if (isGenerating || isSharing) {
-        console.log('🚫 BLOCKED: Cannot go back while processing PDF');
+      if (isGenerating) {
+        console.warn('🚫 BLOCKED: Cannot go back while generating PDF');
+        Alert.alert(
+          'PDF Generating',
+          'Please wait for the PDF generation to complete before going back.',
+          [{ text: 'OK' }],
+        );
         return true;
       }
 
@@ -163,7 +162,7 @@ export default function InstantReport({ route, navigation }: Props) {
       console.log('🧹 Removing BackHandler');
       backHandler.remove();
     };
-  }, [isGenerating, isSharing, handleBack]);
+  }, [isGenerating, handleBack]);
 
   const summaryRows = useMemo(
     () => [
@@ -180,109 +179,7 @@ export default function InstantReport({ route, navigation }: Props) {
     [data],
   );
 
-  // ✅ Blink animation for share button
-  const triggerShareBlink = () => {
-    // Blink effect: fade to 0.3 opacity and back to 1
-    Animated.sequence([
-      Animated.timing(shareBlinkAnim, {
-        toValue: 0.3,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(shareBlinkAnim, {
-        toValue: 1,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(shareBlinkAnim, {
-        toValue: 0.3,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(shareBlinkAnim, {
-        toValue: 1,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
-
-  // ✅ FIXED: Share button - hides loading overlay BEFORE opening share dialog
-  const onShareReport = async () => {
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('📤 Share Report: Started (Generate PDF + Share)');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
-    try {
-      if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted, aborting share');
-        return;
-      }
-
-      // ✅ Trigger blink animation
-      triggerShareBlink();
-
-      console.log('🔄 Setting isSharing = true');
-      setIsSharing(true);
-
-      // ✅ STEP 1: Generate PDF first
-      console.log('📝 Step 1: Generating PDF...');
-      const generatedPath = await generateReportPdf(data);
-
-      // ✅ Check if still mounted after async PDF generation
-      if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted during PDF generation');
-        console.warn('⚠️ PDF was saved at:', generatedPath);
-        setIsSharing(false); // Clean up state
-        return;
-      }
-
-      console.log('✅ PDF generated successfully:', generatedPath);
-
-      // ✅ Update pdfPath state
-      setPdfPath(generatedPath);
-
-      // ✅ CRITICAL FIX: Hide loading overlay BEFORE opening share dialog
-      // The share dialog will block the app, so we need to update state first
-      console.log('🔄 Setting isSharing = false (before opening share dialog)');
-      setIsSharing(false);
-
-      // ✅ STEP 2: Share the generated PDF
-      // Note: This will open a modal dialog and block, but our overlay is already hidden
-      console.log('📤 Step 2: Opening share dialog for PDF...');
-
-      // Small delay to ensure state update completes before opening dialog
-      await new Promise<void>(resolve => setTimeout(resolve, 100));
-
-      await shareReportPdf(generatedPath);
-
-      console.log('✅ Share dialog opened/closed successfully');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('✅ Share Report: Completed Successfully');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    } catch (error: any) {
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.error('❌ Share Report: FAILED');
-      console.error('Error:', error);
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
-      if (isMounted.current) {
-        Alert.alert(
-          'Error',
-          `Failed to generate/share PDF.\n\n${
-            error.message || 'Please try again.'
-          }`,
-          [{ text: 'OK' }],
-        );
-
-        // ✅ Make sure to reset state on error
-        setIsSharing(false);
-      } else {
-        console.warn('⚠️ Component unmounted, skipping error alert');
-      }
-    }
-  };
-  // ✅ Download handler with NOTIFICATION
+  // ✅ Fixed download handler with NOTIFICATION
   const onDownloadReport = async () => {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('📥 Download Report: Started');
@@ -323,23 +220,14 @@ export default function InstantReport({ route, navigation }: Props) {
       // ✅ Update state (only if mounted)
       setPdfPath(path);
 
-      // ✅ Show Alert.alert
+      // ✅ Show Alert.alert (as requested)
       console.log('📢 Showing success alert');
       Alert.alert('Success! ✅', `PDF saved successfully!`, [
         { text: 'OK', style: 'default' },
       ]);
 
-      // ✅ CRITICAL FIX: Hide loader BEFORE opening PDF
-      console.log('🔄 Setting isGenerating = false (before opening PDF)');
-      setIsGenerating(false);
-      isGeneratingRef.current = false;
-
-      // ✅ Small delay to ensure state update completes
-      console.log('⏳ Waiting 100ms for UI to update...');
-      await new Promise<void>(resolve => setTimeout(resolve, 100));
-
-      // ✅ NOW show notification (which auto-opens PDF)
-      console.log('🔔 Showing system notification and opening PDF');
+      // ✅ SHOW NOTIFICATION (after Alert)
+      console.log('🔔 Showing system notification');
       await showDownloadNotification(path);
 
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -361,14 +249,55 @@ export default function InstantReport({ route, navigation }: Props) {
         console.warn('⚠️ Component unmounted, skipping error alert');
       }
     } finally {
-      // ✅ Make sure loader is hidden in case of error
       if (isMounted.current) {
-        console.log('🔄 Final cleanup: Setting isGenerating = false');
+        console.log('🔄 Setting isGenerating = false');
         setIsGenerating(false);
         isGeneratingRef.current = false;
       } else {
         console.warn('⚠️ Component unmounted, skipping state reset');
         isGeneratingRef.current = false;
+      }
+    }
+  };
+
+  // ✅ Fixed share handler
+  const onShareReport = async () => {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📤 Share Report: Started');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    try {
+      if (!isMounted.current) {
+        console.warn('⚠️ Component unmounted, aborting share');
+        return;
+      }
+
+      if (!pdfPath) {
+        console.warn('⚠️ No PDF path available');
+        Alert.alert('Info', 'Please download the report first');
+        return;
+      }
+
+      console.log('📤 Calling shareReportPdf with path:', pdfPath);
+      await shareReportPdf(pdfPath);
+
+      if (!isMounted.current) {
+        console.warn('⚠️ Component unmounted during share');
+        return;
+      }
+
+      console.log('✅ Share completed successfully');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    } catch (error: any) {
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.error('❌ Share Report: FAILED');
+      console.error('Error:', error);
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+      if (isMounted.current) {
+        Alert.alert('Error', 'Failed to share report. Please try again.');
+      } else {
+        console.warn('⚠️ Component unmounted, skipping error alert');
       }
     }
   };
@@ -381,40 +310,32 @@ export default function InstantReport({ route, navigation }: Props) {
       <View style={styles.topBar}>
         <Pressable
           onPress={handleBack}
-          disabled={isGenerating || isSharing}
+          disabled={isGenerating}
+          // style={isGenerating && styles.disabledButton}
           style={[
-            styles.backButton,
-            (isGenerating || isSharing) && styles.disabledButton,
+            styles.backButton, // ✅ Base style
+            isGenerating && styles.disabledButton, // ✅ Conditional style
           ]}
         >
-          <ArrowLeft
-            size={24}
-            color={isGenerating || isSharing ? '#4B5563' : '#E5E7EB'}
-          />
+          <ArrowLeft size={24} color={isGenerating ? '#4B5563' : '#E5E7EB'} />
         </Pressable>
 
         <Text style={styles.topTitle}>Report</Text>
 
-        {/* ✅ FIXED: Share button with loading state */}
-        <Animated.View style={{ opacity: shareBlinkAnim }}>
-          <Pressable
-            onPress={onShareReport}
-            disabled={isGenerating || isSharing}
-            style={[
-              styles.shareButton,
-              (isGenerating || isSharing) && styles.disabledButton,
-            ]}
-          >
-            {isSharing ? (
-              <ActivityIndicator size="small" color="#E5E7EB" />
-            ) : (
-              <Share2
-                size={20}
-                color={isGenerating || isSharing ? '#4B5563' : '#E5E7EB'}
-              />
-            )}
-          </Pressable>
-        </Animated.View>
+        <Pressable
+          onPress={onShareReport}
+          disabled={!pdfPath || isGenerating}
+          // style={(!pdfPath || isGenerating) && styles.disabledButton}
+          style={[
+            styles.shareButton, // ✅ Base style
+            (!pdfPath || isGenerating) && styles.disabledButton, // ✅ Conditional
+          ]}
+        >
+          <Share2
+            size={20}
+            color={pdfPath && !isGenerating ? '#E5E7EB' : '#4B5563'}
+          />
+        </Pressable>
       </View>
 
       <ScrollView
@@ -422,7 +343,7 @@ export default function InstantReport({ route, navigation }: Props) {
           styles.scroll,
           { paddingBottom: scrollBottomPadding },
         ]}
-        scrollEnabled={!isGenerating && !isSharing}
+        scrollEnabled={!isGenerating}
       >
         {/* Report Card */}
         <View style={styles.card}>
@@ -477,10 +398,10 @@ export default function InstantReport({ route, navigation }: Props) {
           <Pressable
             style={[
               styles.downloadBtn,
-              (isGenerating || isSharing) && styles.downloadBtnDisabled,
+              isGenerating && styles.downloadBtnDisabled,
             ]}
             onPress={onDownloadReport}
-            disabled={isGenerating || isSharing}
+            disabled={isGenerating}
           >
             {isGenerating ? (
               <>
@@ -495,14 +416,12 @@ export default function InstantReport({ route, navigation }: Props) {
             )}
           </Pressable>
 
-          {/* ✅ Generating/Sharing Overlay */}
-          {(isGenerating || isSharing) && (
+          {/* Generating Overlay */}
+          {isGenerating && (
             <View style={styles.generatingOverlay}>
               <View style={styles.generatingCard}>
                 <ActivityIndicator size="large" color="#111827" />
-                <Text style={styles.generatingText}>
-                  {isSharing ? 'Preparing to Share...' : 'Generating PDF...'}
-                </Text>
+                <Text style={styles.generatingText}>Generating PDF...</Text>
                 <Text style={styles.generatingSubtext}>
                   Please don't press back
                 </Text>
@@ -553,10 +472,10 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   backButton: {
-    padding: 8,
+    padding: 8, // Larger tap area
   },
   shareButton: {
-    padding: 8,
+    padding: 8, // Larger tap area
   },
   disabledButton: {
     opacity: 0.4,
@@ -727,6 +646,31 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '800',
     fontSize: 15,
+  },
+
+  successBox: {
+    marginTop: 12,
+    backgroundColor: '#ECFDF5',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#10B981',
+    alignItems: 'center',
+  },
+
+  successText: {
+    color: '#065F46',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+
+  successSubtext: {
+    color: '#059669',
+    fontSize: 12,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 4,
   },
 
   generatingOverlay: {

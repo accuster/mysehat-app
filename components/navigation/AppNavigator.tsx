@@ -1,4 +1,5 @@
 // components/navigation/AppNavigator.tsx
+// ✅ FIXED VERSION - Better gesture handling and error prevention
 import React from 'react';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -18,7 +19,7 @@ import PayScreen from '../screens/user/PayScreen';
 import PaymentSuccessScreen from '../screens/user/PaymentSuccessScreen';
 import InstantReport, { ReportData } from '../screens/user/InstantReport';
 import ManageMembersScreen from '../screens/user/ManageMembersScreen';
-import WalletScreen from '../screens/user/WalletScreen'; // ✅ ADD THIS
+import WalletScreen from '../screens/user/WalletScreen';
 import ProfileScreen from '../screens/user/ProfileScreen';
 
 import FloatingBottomNav from '../FloatingBottomNav';
@@ -49,7 +50,7 @@ export type AppStackParamList = {
   Tabs: undefined;
   Reports: undefined;
   Transactions: undefined;
-  Wallet: undefined; // ✅ ADD THIS
+  Wallet: undefined;
   Support: undefined;
   ManageMembers: undefined;
   Profile: undefined;
@@ -88,7 +89,14 @@ const AppStack = createNativeStackNavigator<AppStackParamList>();
 
 function AuthNavigator() {
   return (
-    <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+    <AuthStack.Navigator 
+      screenOptions={{ 
+        headerShown: false,
+        // ✅ Enable gesture navigation for auth screens
+        gestureEnabled: true,
+        animation: 'slide_from_right',
+      }}
+    >
       <AuthStack.Screen name="Login" component={LoginScreen} />
       <AuthStack.Screen name="CompleteProfile" component={CompleteProfileScreen} />
     </AuthStack.Navigator>
@@ -97,7 +105,12 @@ function AuthNavigator() {
 
 function AppTabNavigator() {
   return (
-    <AppTab.Navigator screenOptions={{ headerShown: false }} tabBar={FloatingBottomNav}>
+    <AppTab.Navigator 
+      screenOptions={{ 
+        headerShown: false,
+      }} 
+      tabBar={FloatingBottomNav}
+    >
       <AppTab.Screen name="MySehat" component={HomeScreen} />
       <AppTab.Screen name="QR" component={ScanScreen} />
     </AppTab.Navigator>
@@ -106,8 +119,22 @@ function AppTabNavigator() {
 
 function AppStackNavigator() {
   return (
-    <AppStack.Navigator screenOptions={{ headerShown: false }}>
-      <AppStack.Screen name="Tabs" component={AppTabNavigator} />
+    <AppStack.Navigator 
+      screenOptions={{ 
+        headerShown: false,
+        // ✅ Enable gesture navigation for all screens by default
+        gestureEnabled: true,
+        animation: 'slide_from_right',
+      }}
+    >
+      <AppStack.Screen 
+        name="Tabs" 
+        component={AppTabNavigator}
+        options={{
+          // ✅ Disable gesture on home to prevent accidental back
+          gestureEnabled: false,
+        }}
+      />
       <AppStack.Screen name="Reports" component={ReportsScreen} />
       <AppStack.Screen name="Transactions" component={TransactionsScreen} />
       <AppStack.Screen name="Wallet" component={WalletScreen} />
@@ -117,10 +144,29 @@ function AppStackNavigator() {
       <AppStack.Screen 
         name="SelectUser" 
         component={SelectUserContainer}
-        options={{ presentation: 'modal', animation: 'slide_from_bottom' }} 
+        options={{ 
+          presentation: 'modal', 
+          animation: 'slide_from_bottom',
+          // ✅ Enable gesture for modal
+          gestureEnabled: true,
+        }} 
       />
-      <AppStack.Screen name="Pay" component={PayScreen} />
-      <AppStack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} />
+      <AppStack.Screen 
+        name="Pay" 
+        component={PayScreen}
+        options={{
+          // ✅ Disable gesture during payment to prevent accidental back
+          gestureEnabled: false,
+        }}
+      />
+      <AppStack.Screen 
+        name="PaymentSuccess" 
+        component={PaymentSuccessScreen}
+        options={{
+          // ✅ Disable gesture on success screen
+          gestureEnabled: false,
+        }}
+      />
       <AppStack.Screen name="Report" component={InstantReport} />
     </AppStack.Navigator>
   );
@@ -140,11 +186,31 @@ export default function AppNavigator() {
   };
 
   return (
-    <NavigationContainer theme={navTheme}>
-      <RootStack.Navigator screenOptions={{ headerShown: false }}>
-        <RootStack.Screen name="Splash" component={SplashScreen} />
+    <NavigationContainer 
+      theme={navTheme}
+      fallback={null}
+    >
+      <RootStack.Navigator 
+        screenOptions={{ 
+          headerShown: false,
+          gestureEnabled: true,
+        }}
+      >
+        <RootStack.Screen 
+          name="Splash" 
+          component={SplashScreen}
+          options={{
+            gestureEnabled: false,
+          }}
+        />
         <RootStack.Screen name="Auth" component={AuthNavigator} />
-        <RootStack.Screen name="App" component={AppStackNavigator} />
+        <RootStack.Screen 
+          name="App" 
+          component={AppStackNavigator}
+          options={{
+            gestureEnabled: false,
+          }}
+        />
       </RootStack.Navigator>
     </NavigationContainer>
   );

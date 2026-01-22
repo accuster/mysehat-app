@@ -1,11 +1,12 @@
 // components/screens/user/SelectUserContainer.tsx
-import React, { useEffect, useState } from "react";
+// ✅ FIXED VERSION - Prevents crashes on back navigation
+import React, { useEffect, useState, useRef } from "react";
 import { Alert } from "react-native";
 import { useDispatch, useSelector } from 'react-redux';
 import SelectUserBottomSheet from "./SelectUserBottomSheet";
 import AddMemberModal from "./AddMemberModal";
 import { fetchMembers, createMember } from '../../../store/slices/memberSlice';
-import { updateOrderUser } from '../../../store/slices/orderSlice'; // ✅ ADD THIS
+import { updateOrderUser } from '../../../store/slices/orderSlice';
 import { RootState, AppDispatch } from '../../../store';
 
 type Props = {
@@ -14,7 +15,7 @@ type Props = {
     params: {
       qrData: any;
       rawData: string;
-      orderId?: string; // ✅ ADD THIS
+      orderId?: string;
     };
   };
 };
@@ -23,28 +24,48 @@ export default function SelectUserContainer({ navigation, route }: Props) {
   const dispatch = useDispatch<AppDispatch>();
   const { members: reduxMembers, isLoading } = useSelector((state: RootState) => state.members);
   
-  const { qrData, rawData, orderId } = route.params || {}; // ✅ GET orderId
+  // ✅ Track if component is mounted
+  const isMounted = useRef(true);
+  
+  const { qrData, rawData, orderId } = route.params || {};
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isUpdatingOrder, setIsUpdatingOrder] = useState(false); // ✅ ADD THIS
+  const [isUpdatingOrder, setIsUpdatingOrder] = useState(false);
 
-  // Fetch members on mount (only if not already loaded)
+  // ✅ Setup and cleanup
   useEffect(() => {
+    isMounted.current = true;
+    
+    // Fetch members on mount
     if (reduxMembers.length === 0) {
       console.log('🔄 SelectUser: Fetching members...');
       dispatch(fetchMembers());
     } else {
       console.log('✅ SelectUser: Using cached members:', reduxMembers.length);
     }
-  }, [dispatch, reduxMembers.length]);
+
+    // ✅ Cleanup on unmount
+    return () => {
+      console.log('🧹 SelectUser: Cleaning up...');
+      isMounted.current = false;
+      
+      // Cancel any pending operations
+      if (isSaving) {
+        console.warn('⚠️ Component unmounted during save operation');
+      }
+      if (isUpdatingOrder) {
+        console.warn('⚠️ Component unmounted during order update');
+      }
+    };
+  }, [dispatch]);
 
   // Format members for SelectUserScreen
   const formattedMembers = reduxMembers.map(member => ({
     id: member.id,
     name: member.name,
     age: member.age,
-    gender: member.gender.charAt(0) as 'M' | 'F' | 'O', // "Male" → "M"
+    gender: member.gender.charAt(0) as 'M' | 'F' | 'O',
     isSuperUser: member.userType === 'SuperUser',
   }));
 
@@ -54,6 +75,7 @@ export default function SelectUserContainer({ navigation, route }: Props) {
     isLoading,
     selectedIndex,
     showAddModal,
+    isMounted: isMounted.current,
   });
 
   const handleSelect = (index: number) => {
@@ -61,20 +83,42 @@ export default function SelectUserContainer({ navigation, route }: Props) {
   };
 
   const handleBack = () => {
-    navigation.goBack();
+    // ✅ Safe navigation check
+    try {
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      }
+    } catch (error) {
+      console.error('❌ Navigation error:', error);
+    }
   };
 
   const handleAddUser = () => {
     console.log('➕ Opening Add Member Modal');
-    setShowAddModal(true);
+    if (isMounted.current) {
+      setShowAddModal(true);
+    }
   };
 
   const handleSaveMember = async (data: { name: string; age: number; gender: 'Male' | 'Female' | 'Other' }) => {
     console.log('💾 Saving new member:', data);
+    
+    // ✅ Check if still mounted
+    if (!isMounted.current) {
+      console.warn('⚠️ Component unmounted, aborting save');
+      return;
+    }
+    
     setIsSaving(true);
 
     try {
       await dispatch(createMember(data)).unwrap();
+      
+      // ✅ Check before state updates
+      if (!isMounted.current) {
+        console.warn('⚠️ Component unmounted after create, skipping updates');
+        return;
+      }
       
       console.log('✅ Member added successfully!');
       Alert.alert('Success', 'Family member added successfully!');
@@ -82,18 +126,27 @@ export default function SelectUserContainer({ navigation, route }: Props) {
       // Refresh members list
       await dispatch(fetchMembers());
       
-      // Close modal
-      setShowAddModal(false);
+      // ✅ Check again before closing modal
+      if (isMounted.current) {
+        setShowAddModal(false);
+      }
     } catch (error: any) {
       console.error('❌ Failed to add member:', error);
-      Alert.alert('Error', error.message || 'Failed to add member');
-      throw error; // Re-throw to prevent modal from closing
+      
+      // ✅ Only show alert if mounted
+      if (isMounted.current) {
+        Alert.alert('Error', error.message || 'Failed to add member');
+      }
+      throw error;
     } finally {
-      setIsSaving(false);
+      // ✅ Only update state if mounted
+      if (isMounted.current) {
+        setIsSaving(false);
+      }
     }
   };
 
-  const handleContinue = async () => { // ✅ Make async
+  const handleContinue = async () => {
     if (selectedIndex === null || !formattedMembers || formattedMembers.length === 0) {
       console.warn('⚠️ No member selected or members array is empty');
       return;
@@ -113,7 +166,14 @@ export default function SelectUserContainer({ navigation, route }: Props) {
 
     // ✅ UPDATE ORDER WITH SELECTED USER_ID
     if (orderId) {
+      // ✅ Check if mounted before starting
+      if (!isMounted.current) {
+        console.warn('⚠️ Component unmounted, aborting order update');
+        return;
+      }
+      
       setIsUpdatingOrder(true);
+      
       try {
         console.log('👤 Updating order with selected user...');
         await dispatch(updateOrderUser({
@@ -121,34 +181,61 @@ export default function SelectUserContainer({ navigation, route }: Props) {
           userId: originalMember.id,
         })).unwrap();
         
+        // ✅ Check if still mounted after async operation
+        if (!isMounted.current) {
+          console.warn('⚠️ Component unmounted after order update, skipping navigation');
+          return;
+        }
+        
         console.log('✅ Order updated successfully!');
       } catch (error: any) {
         console.error('❌ Failed to update order:', error);
-        Alert.alert('Error', 'Failed to update order. Please try again.');
-        setIsUpdatingOrder(false);
-        return; // Don't navigate if update failed
+        
+        // ✅ Only show alert if mounted
+        if (isMounted.current) {
+          Alert.alert('Error', 'Failed to update order. Please try again.');
+          setIsUpdatingOrder(false);
+        }
+        return;
       } finally {
-        setIsUpdatingOrder(false);
+        // ✅ Only update state if mounted
+        if (isMounted.current) {
+          setIsUpdatingOrder(false);
+        }
       }
     } else {
       console.warn('⚠️ No orderId provided, skipping order update');
     }
 
-    // Navigate to Pay screen with selected user and QR data
-    navigation.navigate("Pay", {
-      selectedUserName: originalMember.name,
-      scannedPayload: rawData,
-      user: {
-        id: originalMember.id,
-        name: originalMember.name,
-        age: originalMember.age,
-        gender: originalMember.gender,
-        userType: originalMember.userType,
-      },
-      qrData: qrData,
-      rawData: rawData,
-      orderId: orderId, // ✅ Pass orderId to Pay screen
-    });
+    // ✅ Final mounted check before navigation
+    if (!isMounted.current) {
+      console.warn('⚠️ Component unmounted, skipping navigation to Pay screen');
+      return;
+    }
+
+    // ✅ Safe navigation with try-catch
+    try {
+      navigation.navigate("Pay", {
+        selectedUserName: originalMember.name,
+        scannedPayload: rawData,
+        user: {
+          id: originalMember.id,
+          name: originalMember.name,
+          age: originalMember.age,
+          gender: originalMember.gender,
+          userType: originalMember.userType,
+        },
+        qrData: qrData,
+        rawData: rawData,
+        orderId: orderId,
+      });
+    } catch (error) {
+      console.error('❌ Navigation error:', error);
+      
+      if (isMounted.current) {
+        Alert.alert('Error', 'Navigation failed. Please try again.');
+      }
+    }
   };
 
   return (
@@ -156,7 +243,7 @@ export default function SelectUserContainer({ navigation, route }: Props) {
       <SelectUserBottomSheet
         members={formattedMembers}
         selectedIndex={selectedIndex}
-        isLoading={isLoading || isUpdatingOrder} // ✅ Show loading during order update
+        isLoading={isLoading || isUpdatingOrder}
         onSelect={handleSelect}
         onBack={handleBack}
         onContinue={handleContinue}
@@ -165,7 +252,11 @@ export default function SelectUserContainer({ navigation, route }: Props) {
 
       <AddMemberModal
         visible={showAddModal}
-        onClose={() => setShowAddModal(false)}
+        onClose={() => {
+          if (isMounted.current) {
+            setShowAddModal(false);
+          }
+        }}
         onSave={handleSaveMember}
         isLoading={isSaving}
       />

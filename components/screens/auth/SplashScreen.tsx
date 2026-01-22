@@ -1,5 +1,5 @@
 // components/screens/auth/SplashScreen.tsx
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { View, StyleSheet, StatusBar, Image } from "react-native";
 import { useSelector } from "react-redux";
 import { RootState } from "../../../store";
@@ -7,16 +7,27 @@ import { RootState } from "../../../store";
 type Props = { navigation: any };
 
 export default function SplashScreen({ navigation }: Props) {
-  // ✅ Get auth state from Redux (will be restored by Redux Persist)
+  // ✅ Add isMounted ref (low priority but good practice)
+  const isMounted = useRef(true);
+  
   const { user, isAuthenticated } = useSelector((state: RootState) => state.auth);
 
   useEffect(() => {
+    isMounted.current = true;
+    
+    console.log('🚀 SplashScreen: Component mounted');
+    
     const timer = setTimeout(() => {
+      // ✅ Check if mounted before navigation
+      if (!isMounted.current) {
+        console.warn('⚠️ SplashScreen unmounted before navigation');
+        return;
+      }
+      
       console.log('🔍 SplashScreen: Checking auth state...');
       console.log('User:', user ? user.userId : 'null');
       console.log('isAuthenticated:', isAuthenticated);
       
-      // ✅ Navigate based on auth state
       if (isAuthenticated && user) {
         console.log('✅ User is authenticated, navigating to App');
         navigation.replace("App");
@@ -24,9 +35,13 @@ export default function SplashScreen({ navigation }: Props) {
         console.log('❌ User not authenticated, navigating to Auth');
         navigation.replace("Auth");
       }
-    }, 1200); // Keep the 1.2s delay for UX
+    }, 1200);
 
-    return () => clearTimeout(timer);
+    return () => {
+      console.log('🧹 SplashScreen: Unmounting...');
+      isMounted.current = false;
+      clearTimeout(timer);
+    };
   }, [navigation, user, isAuthenticated]);
 
   return (

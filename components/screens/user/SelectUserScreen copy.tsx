@@ -1,6 +1,6 @@
 // components/screens/user/SelectUserScreen.tsx
 /* eslint-disable react-native/no-inline-styles */
-import React, { useEffect, useRef } from 'react';
+import React from "react";
 import {
   View,
   Text,
@@ -8,18 +8,17 @@ import {
   Pressable,
   FlatList,
   ActivityIndicator,
-  BackHandler,
-} from 'react-native';
-// ✅ Import SafeAreaView and hook
+} from "react-native";
+// ✅ STEP 1: Import SafeAreaView and hook
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronRight } from 'lucide-react-native';
+import { ChevronRight } from "lucide-react-native";
 
 type Member = {
   id?: string;
   name: string;
   age: number;
-  gender: 'M' | 'F' | 'O';
+  gender: "M" | "F" | "O";
   isSuperUser?: boolean;
 };
 
@@ -40,58 +39,14 @@ export default function SelectUserScreen({
   onBack,
   onContinue,
 }: Props) {
-  // ✅ Add isMounted ref for cleanup
-  const isMounted = useRef(true);
-  
-  // ✅ Calculate dynamic padding
+  // ✅ STEP 2: Add safe area hook and calculate dynamic padding
   const insets = useSafeAreaInsets();
   const contentBottomPadding = 120 + (insets.bottom > 0 ? insets.bottom : 0);
+  // ✅ Calculate dynamic bottom position for footer
   const footerBottom = 16 + (insets.bottom > 0 ? insets.bottom : 0);
-
-  // ✅ Setup and cleanup
-  useEffect(() => {
-    isMounted.current = true;
-
-    return () => {
-      console.log('🧹 SelectUserScreen: Unmounting...');
-      isMounted.current = false;
-    };
-  }, []);
-
-  // ✅ Handle hardware back button
-  useEffect(() => {
-    const backAction = () => {
-      console.log('⬅️ HARDWARE BACK: SelectUserScreen');
-      if (isMounted.current) {
-        onBack();
-        return true;
-      }
-      return false;
-    };
-
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      backAction,
-    );
-
-    return () => backHandler.remove();
-  }, [onBack]);
-
-  // ✅ Safe onSelect wrapper
-  const handleSelect = (index: number) => {
-    if (isMounted.current) {
-      onSelect(index);
-    }
-  };
-
-  // ✅ Safe onContinue wrapper
-  const handleContinue = () => {
-    if (isMounted.current) {
-      onContinue();
-    }
-  };
-
+  
   return (
+    // ✅ STEP 3: Replace View with SafeAreaView
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
@@ -121,13 +76,14 @@ export default function SelectUserScreen({
         <FlatList
           data={members}
           keyExtractor={(item, i) => item.id || i.toString()}
+          // ✅ STEP 4: Use dynamic padding instead of hardcoded 120
           contentContainerStyle={{ paddingBottom: contentBottomPadding }}
           renderItem={({ item, index }) => {
             const selected = selectedIndex === index;
 
             return (
               <Pressable
-                onPress={() => handleSelect(index)}
+                onPress={() => onSelect(index)}
                 style={[styles.card, selected && styles.cardActive]}
               >
                 <View>
@@ -149,16 +105,14 @@ export default function SelectUserScreen({
         />
       )}
 
-      {/* Continue Button */}
+      {/* Continue Button - ✅ With dynamic bottom position */}
       <View style={[styles.footer, { bottom: footerBottom }]}>
         <Pressable
           style={[
             styles.payBtn,
-            (selectedIndex === null || !members || members.length === 0) && {
-              opacity: 0.5,
-            },
+            (selectedIndex === null || !members || members.length === 0) && { opacity: 0.5 },
           ]}
-          onPress={handleContinue}
+          onPress={onContinue}
           disabled={selectedIndex === null || !members || members.length === 0}
         >
           <Text style={styles.payText}>Continue to Pay</Text>
@@ -173,22 +127,22 @@ export default function SelectUserScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#020617',
+    backgroundColor: "#020617",
     padding: 16,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   back: {
-    color: '#94A3B8',
+    color: "#94A3B8",
     fontSize: 14,
   },
   title: {
     fontSize: 22,
-    fontWeight: '800',
-    color: '#fff',
+    fontWeight: "800",
+    color: "#fff",
     marginTop: 20,
     marginBottom: 16,
   },
@@ -224,47 +178,48 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    backgroundColor: '#0F172A',
+    backgroundColor: "#0F172A",
     borderRadius: 14,
     padding: 16,
     marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     borderWidth: 1,
-    borderColor: '#020617',
+    borderColor: "#020617",
   },
   cardActive: {
-    backgroundColor: '#1E1B4B',
-    borderColor: '#7C3AED',
+    backgroundColor: "#1E1B4B",
+    borderColor: "#7C3AED",
   },
   name: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   super: {
     fontSize: 12,
-    color: '#C4B5FD',
+    color: "#C4B5FD",
   },
   meta: {
-    color: '#94A3B8',
+    color: "#94A3B8",
     marginTop: 4,
   },
   footer: {
-    position: 'absolute',
+    position: "absolute",
+    // ✅ bottom is now set via inline style with dynamic value
     left: 16,
     right: 16,
   },
   payBtn: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: "#7C3AED",
     paddingVertical: 16,
     borderRadius: 16,
-    alignItems: 'center',
+    alignItems: "center",
   },
   payText: {
-    color: '#fff',
-    fontWeight: '800',
+    color: "#fff",
+    fontWeight: "800",
     fontSize: 16,
   },
 });

@@ -1,7 +1,7 @@
 // components/screens/user/SupportView.tsx
 /* eslint-disable react-native/no-inline-styles */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -39,15 +39,19 @@ type Props = {
   ) => Promise<
     { ok: true; events: TicketTimelineEvent[] } | { ok: false; error: string }
   >;
-  bottomInset: number; // ✅ Add this prop
+  bottomInset: number;
+  onMessageChange?: (hasMessage: boolean) => void;
 };
 
 export default function SupportView({
   tickets,
   onCreateTicket,
   onFetchTimeline,
-  bottomInset, // ✅ Receive bottom inset
+  bottomInset,
+  onMessageChange,
 }: Props) {
+  const isMounted = useRef(true);
+  
   const [view, setView] = useState<'form' | 'success' | 'history'>(
     tickets.length ? 'history' : 'form',
   );
@@ -71,6 +75,24 @@ export default function SupportView({
     Record<string, string>
   >({});
 
+  const MIN_MESSAGE_LENGTH = 10;
+  const MAX_MESSAGE_LENGTH = 1000;
+
+  useEffect(() => {
+    isMounted.current = true;
+    
+    console.log('🎫 SupportView: Component mounted');
+
+    return () => {
+      console.log('🧹 SupportView: Unmounting...');
+      isMounted.current = false;
+      
+      if (submitting || timelineLoadingId) {
+        console.warn('⚠️ Component unmounted during async operation');
+      }
+    };
+  }, []);
+
   useEffect(() => {
     setView(v => (tickets.length && v === 'form' ? 'history' : v));
   }, [tickets.length]);
@@ -79,31 +101,90 @@ export default function SupportView({
     setShowCategoryDropdown(false);
   }, [view]);
 
+  useEffect(() => {
+    if (onMessageChange) {
+      onMessageChange(message.trim().length > 0 && view === 'form');
+    }
+  }, [message, view, onMessageChange]);
+
+  const validateMessage = (text: string): string | null => {
+    const trimmed = text.trim();
+    
+    if (trimmed.length < MIN_MESSAGE_LENGTH) {
+      return `Please add more detail (minimum ${MIN_MESSAGE_LENGTH} characters).`;
+    }
+    
+    if (trimmed.length > MAX_MESSAGE_LENGTH) {
+      return `Message is too long (maximum ${MAX_MESSAGE_LENGTH} characters).`;
+    }
+    
+    if (/<[^>]*>/g.test(trimmed)) {
+      return 'HTML tags are not allowed in messages.';
+    }
+    
+    return null;
+  };
+
   const submit = async () => {
+    if (!isMounted.current) {
+      console.warn('⚠️ Component unmounted, aborting submit');
+      return;
+    }
+    
     setError(null);
 
-    if (message.trim().length < 10) {
-      setError('Please add a bit more detail (min 10 characters).');
+    const validationError = validateMessage(message);
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
     setSubmitting(true);
+    
     try {
-      const res = await onCreateTicket({ category, message: message.trim() });
+      console.log('📤 Submitting ticket...');
+      
+      const res = await onCreateTicket({ 
+        category, 
+        message: message.trim() 
+      });
+      
+      if (!isMounted.current) {
+        console.warn('⚠️ Component unmounted after ticket submission');
+        return;
+      }
+      
       if (!res.ok) {
         setError(res.error);
         return;
       }
+      
+      console.log('✅ Ticket submitted:', res.ticketId);
+      
       setLastTicketId(res.ticketId);
       setMessage('');
       setView('success');
       setShowCategoryDropdown(false);
+    } catch (err) {
+      // ✅ FIX: Use different variable name to avoid ESLint warning
+      console.error('❌ Submit error:', err);
+      
+      if (isMounted.current) {
+        setError('Failed to submit ticket. Please try again.');
+      }
     } finally {
-      setSubmitting(false);
+      if (isMounted.current) {
+        setSubmitting(false);
+      }
     }
   };
 
   const toggleTimeline = async (ticketId: string) => {
+    if (!isMounted.current) {
+      console.warn('⚠️ Component unmounted, aborting timeline toggle');
+      return;
+    }
+    
     if (expandedTicketId === ticketId) {
       setExpandedTicketId(null);
       return;
@@ -115,19 +196,41 @@ export default function SupportView({
     setTimelineLoadingId(ticketId);
     setTimelineErrorById(p => ({ ...p, [ticketId]: '' }));
 
-    const res = await onFetchTimeline(ticketId);
-    if (!res.ok) {
-      setTimelineErrorById(p => ({ ...p, [ticketId]: res.error }));
-      setTimelineLoadingId(null);
-      return;
-    }
+    try {
+      console.log('📅 Fetching timeline for:', ticketId);
+      
+      const res = await onFetchTimeline(ticketId);
+      
+      if (!isMounted.current) {
+        console.warn('⚠️ Component unmounted after timeline fetch');
+        return;
+      }
+      
+      if (!res.ok) {
+        setTimelineErrorById(p => ({ ...p, [ticketId]: res.error }));
+        setTimelineLoadingId(null);
+        return;
+      }
 
-    setTimelineById(p => ({ ...p, [ticketId]: res.events }));
-    setTimelineLoadingId(null);
+      console.log('✅ Timeline loaded');
+      
+      setTimelineById(p => ({ ...p, [ticketId]: res.events }));
+      setTimelineLoadingId(null);
+    } catch (err) {
+      // ✅ FIX: Use different variable name to avoid ESLint warning
+      console.error('❌ Timeline fetch error:', err);
+      
+      if (isMounted.current) {
+        setTimelineErrorById(p => ({ ...p, [ticketId]: 'Failed to load timeline' }));
+        setTimelineLoadingId(null);
+      }
+    }
   };
 
-  // ✅ Calculate dynamic bottom padding
   const scrollBottomPadding = 24 + (bottomInset > 0 ? bottomInset : 0);
+
+  const messageLength = message.trim().length;
+  const isValidLength = messageLength >= MIN_MESSAGE_LENGTH && messageLength <= MAX_MESSAGE_LENGTH;
 
   return (
     <View style={{ flex: 1, backgroundColor: '#0A0A0A' }}>
@@ -174,7 +277,7 @@ export default function SupportView({
         </View>
       </View>
 
-      {/* Content - ✅ Use dynamic bottom padding */}
+      {/* Content */}
       <ScrollView
         contentContainerStyle={{ 
           paddingHorizontal: 16, 
@@ -283,7 +386,6 @@ export default function SupportView({
                 Category
               </Text>
 
-              {/* Simple category chips */}
               <Pressable
                 style={styles.dropdown}
                 onPress={() => setShowCategoryDropdown(!showCategoryDropdown)}
@@ -332,6 +434,8 @@ export default function SupportView({
                 placeholder="Describe your issue in detail…"
                 placeholderTextColor="#52525B"
                 multiline
+                maxLength={MAX_MESSAGE_LENGTH}
+                editable={!submitting}
                 style={{
                   minHeight: 120,
                   padding: 12,
@@ -343,24 +447,34 @@ export default function SupportView({
                   textAlignVertical: 'top',
                 }}
               />
-              <Text style={{ color: '#71717A', fontSize: 12, marginTop: 8 }}>
-                Tip: For device issues, mention model/serial no.
-              </Text>
+              
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 }}>
+                <Text style={{ color: '#71717A', fontSize: 12 }}>
+                  Tip: For device issues, mention model/serial no.
+                </Text>
+                <Text style={{ 
+                  color: isValidLength ? '#10B981' : '#71717A', 
+                  fontSize: 12,
+                  fontWeight: '600'
+                }}>
+                  {messageLength}/{MAX_MESSAGE_LENGTH}
+                </Text>
+              </View>
 
               <Pressable
                 onPress={submit}
-                disabled={submitting}
+                disabled={submitting || !isValidLength}
                 style={{
                   marginTop: 14,
                   backgroundColor: '#7C3AED',
-                  opacity: submitting ? 0.7 : 1,
+                  opacity: (submitting || !isValidLength) ? 0.5 : 1,
                   paddingVertical: 12,
                   borderRadius: 14,
                   alignItems: 'center',
                 }}
               >
                 {submitting ? (
-                  <ActivityIndicator />
+                  <ActivityIndicator color="#FFF" />
                 ) : (
                   <Text style={{ color: '#FFF', fontWeight: '900' }}>
                     Submit Ticket
@@ -369,7 +483,7 @@ export default function SupportView({
               </Pressable>
             </View>
 
-            {/* Contact info + optional policy */}
+            {/* Contact info */}
             <View
               style={{
                 borderWidth: 1,
@@ -391,7 +505,7 @@ export default function SupportView({
               </Text>
 
               <Text style={{ color: '#A1A1AA', fontSize: 12, marginTop: 14 }}>
-                Support policy (optional)
+                Support policy
               </Text>
               <Text style={{ color: '#71717A', marginTop: 6, lineHeight: 18 }}>
                 • Response within 24 working hours{'\n'}• Payment issues are

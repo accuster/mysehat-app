@@ -1,7 +1,8 @@
-// utils/generateReportPdf.ts - FINAL FIX (Copies to Public Downloads)
+// utils/generateReportPdf.ts - FIXED: Uses FileProvider for Android sharing (Google Play compliant)
 import { generatePDF } from 'react-native-html-to-pdf';
 import RNFS from 'react-native-fs';
-import { Share, Platform, PermissionsAndroid, Alert, Linking } from 'react-native';
+import { Share, Platform, Alert, Linking } from 'react-native';
+import SendIntentAndroid from 'react-native-send-intent';
 
 export interface ReportData {
   timestamp: string;
@@ -18,38 +19,6 @@ export interface ReportData {
   fatMassKg: number;
   leanBodyMassKg: number;
   healthScore: number;
-}
-
-/**
- * Request storage permissions for Android
- */
-async function requestStoragePermission(): Promise<boolean> {
-  if (Platform.OS !== 'android') {
-    return true;
-  }
-
-  try {
-    if (Platform.Version >= 33) {
-      // Android 13+ doesn't need WRITE_EXTERNAL_STORAGE
-      return true;
-    }
-
-    const granted = await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-      {
-        title: 'Storage Permission',
-        message: 'MySehat needs access to save PDF reports to your device.',
-        buttonNeutral: 'Ask Me Later',
-        buttonNegative: 'Cancel',
-        buttonPositive: 'OK',
-      }
-    );
-
-    return granted === PermissionsAndroid.RESULTS.GRANTED;
-  } catch (err) {
-    console.error('Permission error:', err);
-    return false;
-  }
 }
 
 /**
@@ -360,12 +329,6 @@ function generateHTMLTemplate(data: ReportData): string {
 export async function generateReportPdf(data: ReportData): Promise<string> {
   try {
     console.log('Starting PDF generation...');
-    
-    // ✅ Request permissions
-    const hasPermission = await requestStoragePermission();
-    if (!hasPermission) {
-      throw new Error('Storage permission denied');
-    }
 
     // ✅ Generate HTML content
     const htmlContent = generateHTMLTemplate(data);
@@ -394,8 +357,8 @@ export async function generateReportPdf(data: ReportData): Promise<string> {
       throw new Error('Failed to generate PDF - no file path returned');
     }
 
-    // ✅ CRITICAL FIX: Copy to PUBLIC Downloads folder
-    const publicDownloadsPath = RNFS.DownloadDirectoryPath; // /storage/emulated/0/Download
+    // ✅ Copy to PUBLIC Downloads folder
+    const publicDownloadsPath = RNFS.DownloadDirectoryPath;
     const finalPath = `${publicDownloadsPath}/${finalFileName}`;
 
     console.log('Copying PDF to public Downloads folder...');
@@ -407,7 +370,7 @@ export async function generateReportPdf(data: ReportData): Promise<string> {
 
     console.log('✅ PDF copied to public Downloads successfully!');
 
-    // Delete temp file (optional, to save space)
+    // Delete temp file
     try {
       await RNFS.unlink(result.filePath);
       console.log('Temp file deleted');
@@ -417,7 +380,7 @@ export async function generateReportPdf(data: ReportData): Promise<string> {
 
     console.log('Final PDF path:', finalPath);
     
-    return finalPath; // Return PUBLIC path, not private path
+    return finalPath;
   } catch (error: any) {
     console.error('PDF Generation Error:', error);
     throw new Error(error.message || 'Failed to generate PDF');
@@ -431,29 +394,21 @@ export async function openPdf(filePath: string): Promise<void> {
   try {
     console.log('Attempting to open PDF:', filePath);
 
-    // ✅ Check if file exists
     const fileExists = await RNFS.exists(filePath);
     if (!fileExists) {
       throw new Error('PDF file not found at: ' + filePath);
     }
 
-    // ✅ Extract filename
     const fileName = filePath.split('/').pop() || 'MySehat_Report.pdf';
 
     if (Platform.OS === 'android') {
-      // ✅ Show user-friendly instructions (no file:// attempt to avoid errors)
       Alert.alert(
         'PDF Saved Successfully ✅',
         `Your health report has been saved!\n\n📁 Location: Downloads folder\n📄 File: ${fileName}\n\n💡 Please open the Downloads folder and tap the PDF file to view it.`,
-        [
-          {
-            text: 'OK',
-            style: 'default',
-          },
-        ]
+        [{ text: 'OK', style: 'default' }]
       );
     } else {
-      // iOS - can use direct file URL
+      // iOS
       const url = `file://${filePath}`;
       const supported = await Linking.canOpenURL(url);
       
@@ -473,37 +428,78 @@ export async function openPdf(filePath: string): Promise<void> {
 }
 
 /**
- * Share PDF using native share dialog
+ * ✅ FIXED: Share PDF using FileProvider (Google Play compliant)
+ * Uses react-native-send-intent for reliable Android sharing
  */
 export async function shareReportPdf(filePath: string): Promise<void> {
   try {
-    console.log('Sharing PDF:', filePath);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📤 shareReportPdf: Starting...');
+    console.log('File path:', filePath);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     
     // ✅ Check if file exists
     const fileExists = await RNFS.exists(filePath);
     if (!fileExists) {
+      console.error('❌ PDF file not found at:', filePath);
       throw new Error('PDF file not found');
     }
 
+    console.log('✅ File exists, proceeding to share...');
+
     if (Platform.OS === 'android') {
-      // ✅ Read file as base64 for Android
-      const base64Data = await RNFS.readFile(filePath, 'base64');
+      // ✅ ANDROID: Use SendIntent for proper FileProvider sharing
+      console.log('📱 Android detected - using SendIntent');
       
-      await Share.share({
-        title: 'Share MySehat Health Report',
-        message: 'Here is my health report from MySehat',
-        url: `data:application/pdf;base64,${base64Data}`,
-      });
+      try {
+        await SendIntentAndroid.openFileChooser(
+          {
+            subject: 'MySehat Health Report',
+            fileUrl: filePath,
+            type: 'application/pdf',
+          },
+          'Share Health Report'
+        );
+        
+        console.log('✅ SendIntent share dialog opened successfully');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      } catch (sendIntentError: any) {
+        console.error('❌ SendIntent failed:', sendIntentError);
+        
+        // ✅ FALLBACK: Try using file:// URL with Share API
+        console.log('⚠️ Attempting fallback method...');
+        
+        const fileUrl = `file://${filePath}`;
+        console.log('File URL:', fileUrl);
+        
+        await Share.share({
+          title: 'Share MySehat Health Report',
+          message: 'Here is my health report from MySehat',
+          url: fileUrl,
+        });
+        
+        console.log('✅ Fallback share completed');
+      }
     } else {
-      // iOS - can use file:// URL
+      // ✅ iOS: Use file:// URL
+      console.log('📱 iOS detected - using Share.share');
+      
       await Share.share({
         title: 'Share MySehat Health Report',
         message: 'Here is my health report from MySehat',
         url: `file://${filePath}`,
       });
+      
+      console.log('✅ iOS share completed');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     }
   } catch (error: any) {
-    console.error('Share Error:', error);
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error('❌ shareReportPdf: FAILED');
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
     throw new Error('Failed to share report: ' + error.message);
   }
 }

@@ -175,29 +175,6 @@ export const loadUserFromStorage = createAsyncThunk(
   },
 );
 
-/**
- * Refresh user profile
- */
-export const refreshProfile = createAsyncThunk(
-  'auth/refreshProfile',
-  async (_, { rejectWithValue }) => {
-    try {
-      console.log('🔄 Refreshing profile...');
-      const response = await authApi.getProfile();
-
-      if (response.success) {
-        await storage.saveUser(response.data);
-        console.log('✅ Profile refreshed');
-        return response.data;
-      }
-
-      return rejectWithValue('Failed to refresh profile');
-    } catch (error: any) {
-      console.error('❌ Error refreshing profile:', error.message);
-      return rejectWithValue(error.message);
-    }
-  },
-);
 
 /**
  * Logout - FIXED VERSION
@@ -347,16 +324,6 @@ const authSlice = createSlice({
         state.isLoading = false;
         state.isAuthenticated = false;
       });
-
-    // Refresh Profile
-    builder.addCase(refreshProfile.fulfilled, (state, action) => {
-      if (state.user) {
-        state.user = {
-          ...state.user,
-          ...action.payload,
-        };
-      }
-    });
 
     // Logout - CRITICAL FIX
     builder

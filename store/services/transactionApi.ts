@@ -1,9 +1,7 @@
 // store/services/transactionApi.ts
 import axios, { AxiosInstance } from 'axios';
 import { storage } from '../../utils/storage';
-
-// Your backend API URL - SAME AS REPORTS API
-const API_BASE_URL = 'https://sandbox.mysehat.ai/api';
+import { API_BASE_URL } from '../constant';
 
 interface TransactionResponse {
   success: boolean;

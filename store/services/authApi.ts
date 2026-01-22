@@ -1,11 +1,10 @@
 // store/services/authApi.ts
 import axios, { AxiosInstance } from 'axios';
-import { LoginResponse, CompleteProfileRequest, CompleteProfileResponse, WalletInfo, FamilyMember } from '../../types/auth.types';
+import { LoginResponse, CompleteProfileRequest, CompleteProfileResponse } from '../../types/auth.types';
 import { storage } from '../../utils/storage';
+import { API_BASE_URL } from '../constant';
 
-// Your backend API URL - CHANGE THIS TO YOUR ACTUAL SERVER
-const API_BASE_URL = 'https://sandbox.mysehat.ai/api';
-
+// Service for authentication-related API calls
 class AuthApiService {
   private api: AxiosInstance;
 
@@ -83,58 +82,6 @@ class AuthApiService {
   async completeProfile(data: CompleteProfileRequest): Promise<CompleteProfileResponse> {
     try {
       const response = await this.api.post<CompleteProfileResponse>('/wa-auth/complete-profile', data);
-      return response.data;
-    } catch (error: any) {
-      throw this.handleError(error);
-    }
-  }
-
-  /**
-   * Get current user profile
-   */
-  async getProfile(): Promise<any> {
-    try {
-      const response = await this.api.get('/wa-auth/me');
-      return response.data;
-    } catch (error: any) {
-      throw this.handleError(error);
-    }
-  }
-
-  /**
-   * Get wallet information
-   */
-  async getWallet(): Promise<WalletInfo> {
-    try {
-      const response = await this.api.get<{ success: boolean; data: WalletInfo }>('/wa-auth/wallet');
-      return response.data.data;
-    } catch (error: any) {
-      throw this.handleError(error);
-    }
-  }
-
-  /**
-   * Get family members
-   */
-  async getFamilyMembers(): Promise<FamilyMember[]> {
-    try {
-      const response = await this.api.get<{ success: boolean; data: { members: FamilyMember[] } }>('/wa-auth/family-members');
-      return response.data.data.members;
-    } catch (error: any) {
-      throw this.handleError(error);
-    }
-  }
-
-  /**
-   * Add family member
-   */
-  async addFamilyMember(fullName: string, age: number, gender: string): Promise<any> {
-    try {
-      const response = await this.api.post('/wa-auth/family-member', {
-        fullName,
-        age,
-        gender,
-      });
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);

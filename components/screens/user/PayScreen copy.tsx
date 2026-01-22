@@ -1,7 +1,7 @@
 // components/screens/user/PayScreen.tsx
 /* eslint-disable react-native/no-inline-styles */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator } from 'react-native';
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetScrollView,
@@ -9,6 +9,7 @@ import BottomSheet, {
 } from '@gorhom/bottom-sheet';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Hash, User, Calendar, Wallet } from 'lucide-react-native';
+// ✅ ADD THIS IMPORT
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import RazorpayCheckout from 'react-native-razorpay';
 import { paymentApi } from '../../../store/services/paymentApi';
@@ -22,16 +23,13 @@ type Props = {
 export default function PayScreen({ route, navigation }: Props) {
   const { selectedUserName, user, orderId, qrData } = route.params;
   const bottomSheetRef = useRef<BottomSheet>(null);
-  
-  // ✅ Add isMounted ref
-  const isMounted = useRef(true);
-  
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
   
+  // ✅ ADD THIS: Get safe area insets
   const insets = useSafeAreaInsets();
 
-  /* Order details from backend */
+  /* ✅ Order details from backend */
   const orderDetails = useMemo(
     () => ({
       orderId: orderId || `ORD${Date.now()}`,
@@ -39,7 +37,7 @@ export default function PayScreen({ route, navigation }: Props) {
         dateStyle: 'medium',
         timeStyle: 'short',
       }),
-      amount: qrData?.test_fee || 10,
+      amount: qrData?.test_fee || 199,
       height: qrData?.height,
       weight: qrData?.weight,
       bmi: qrData?.bmi,
@@ -48,57 +46,12 @@ export default function PayScreen({ route, navigation }: Props) {
     [orderId, qrData],
   );
 
-  // ✅ Setup and cleanup
   useEffect(() => {
-    isMounted.current = true;
-    
-    console.log('💳 PayScreen: Component mounted');
+    console.log('💳 PayScreen: Order Details');
     console.log('Order ID:', orderDetails.orderId);
     console.log('Amount:', orderDetails.amount);
     console.log('User:', user?.name || selectedUserName);
-
-    return () => {
-      console.log('🧹 PayScreen: Unmounting...');
-      isMounted.current = false;
-      
-      // Cancel any pending operations
-      if (isProcessingPayment || isVerifyingPayment) {
-        console.warn('⚠️ Component unmounted during payment operation');
-      }
-    };
   }, []);
-
-  // ✅ Handle hardware back button
-  useEffect(() => {
-    const backAction = () => {
-      console.log('⬅️ HARDWARE BACK: PayScreen');
-      
-      // ✅ Block back during payment
-      if (isProcessingPayment || isVerifyingPayment) {
-        Alert.alert(
-          'Payment in Progress',
-          'Please wait for the payment to complete. Do not press back or close the app.',
-          [{ text: 'OK' }]
-        );
-        return true; // Prevent default back
-      }
-      
-      // ✅ Safe navigation when not processing
-      if (isMounted.current && navigation.canGoBack()) {
-        navigation.goBack();
-        return true;
-      }
-      
-      return false;
-    };
-
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      backAction
-    );
-
-    return () => backHandler.remove();
-  }, [navigation, isProcessingPayment, isVerifyingPayment]);
 
   const snapPoints = useMemo(() => ['80%'], []);
 
@@ -109,17 +62,10 @@ export default function PayScreen({ route, navigation }: Props) {
         appearsOnIndex={0}
         disappearsOnIndex={-1}
         opacity={0.6}
-        onPress={() => {
-          // ✅ Block backdrop press during payment
-          if (!isProcessingPayment && !isVerifyingPayment) {
-            if (isMounted.current && navigation.canGoBack()) {
-              navigation.goBack();
-            }
-          }
-        }}
+        onPress={() => !isProcessingPayment && navigation.goBack()}
       />
     ),
-    [navigation, isProcessingPayment, isVerifyingPayment],
+    [navigation, isProcessingPayment],
   );
 
   useEffect(() => {
@@ -131,12 +77,6 @@ export default function PayScreen({ route, navigation }: Props) {
    */
   const verifyPaymentWithBackend = async (razorpayResponse: any) => {
     try {
-      // ✅ Check if mounted before starting
-      if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted, aborting verification');
-        return;
-      }
-      
       setIsVerifyingPayment(true);
       
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -151,12 +91,6 @@ export default function PayScreen({ route, navigation }: Props) {
         razorpay_signature: razorpayResponse.razorpay_signature,
       });
       
-      // ✅ Check if still mounted after async operation
-      if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted after verification, skipping navigation');
-        return;
-      }
-      
       if (!verifyResponse.success) {
         throw new Error(verifyResponse.message || 'Payment verification failed');
       }
@@ -165,57 +99,36 @@ export default function PayScreen({ route, navigation }: Props) {
       console.log('Report ID:', verifyResponse.data.report_id);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       
-      // ✅ Safe navigation with try-catch
-      try {
-        navigation.navigate('PaymentSuccess', {
-          amountLabel: `₹${orderDetails.amount}`,
-          refNumber: orderDetails.orderId,
-          paymentTime: orderDetails.timestamp,
-          paymentMethod: 'Razorpay',
-          senderName: user?.name || selectedUserName,
-          reportId: verifyResponse.data.report_id,
-          paymentId: razorpayResponse.razorpay_payment_id,
-        });
-      } catch (navError) {
-        console.error('❌ Navigation error:', navError);
-        Alert.alert('Success', 'Payment completed successfully! Please check your reports.');
-      }
+      // Navigate to success screen with real data
+      navigation.navigate('PaymentSuccess', {
+        amountLabel: `₹${orderDetails.amount}`,
+        refNumber: orderDetails.orderId,
+        paymentTime: orderDetails.timestamp,
+        paymentMethod: 'Razorpay',
+        senderName: user?.name || selectedUserName,
+        reportId: verifyResponse.data.report_id,
+        paymentId: razorpayResponse.razorpay_payment_id,
+      });
       
     } catch (error: any) {
       console.error('❌ Payment verification failed:', error.message);
       
-      // ✅ Only show alert if mounted
-      if (isMounted.current) {
-        Alert.alert(
-          'Verification Failed',
-          'Payment completed but verification failed. Please contact support with your payment ID.',
-          [
-            {
-              text: 'Contact Support',
-              onPress: () => {
-                try {
-                  navigation.navigate('Support');
-                } catch (err) {
-                  console.error('Navigation error:', err);
-                }
-              }
-            },
-            {
-              text: 'OK',
-              onPress: () => {
-                if (navigation.canGoBack()) {
-                  navigation.goBack();
-                }
-              }
-            }
-          ]
-        );
-      }
+      Alert.alert(
+        'Verification Failed',
+        'Payment completed but verification failed. Please contact support with your payment ID.',
+        [
+          {
+            text: 'Contact Support',
+            onPress: () => navigation.navigate('Support')
+          },
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack()
+          }
+        ]
+      );
     } finally {
-      // ✅ Only update state if mounted
-      if (isMounted.current) {
-        setIsVerifyingPayment(false);
-      }
+      setIsVerifyingPayment(false);
     }
   };
 
@@ -224,12 +137,6 @@ export default function PayScreen({ route, navigation }: Props) {
    */
   const handlePayment = async () => {
     try {
-      // ✅ Check if mounted before starting
-      if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted, aborting payment');
-        return;
-      }
-      
       setIsProcessingPayment(true);
       
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -240,12 +147,6 @@ export default function PayScreen({ route, navigation }: Props) {
       
       // 1. Create Razorpay order from backend
       const paymentResponse = await paymentApi.createPayment(orderDetails.orderId);
-      
-      // ✅ Check if still mounted after first async operation
-      if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted after creating payment');
-        return;
-      }
       
       if (!paymentResponse.success) {
         throw new Error(paymentResponse.message || 'Failed to create payment');
@@ -259,7 +160,7 @@ export default function PayScreen({ route, navigation }: Props) {
       // 2. Open Razorpay checkout using SDK
       const razorpayOptions = {
         description: 'BMI Report Payment',
-        image: 'https://your-logo-url.com/logo.png',
+        image: 'https://your-logo-url.com/logo.png', // Optional: Add your logo
         currency: paymentData.currency,
         key: paymentData.key_id,
         amount: paymentData.amount,
@@ -275,15 +176,8 @@ export default function PayScreen({ route, navigation }: Props) {
       
       console.log('🌐 Opening Razorpay checkout...');
       
-      // Open Razorpay modal (this can take a while - user interaction needed)
+      // Open Razorpay modal
       const razorpayResponse = await RazorpayCheckout.open(razorpayOptions);
-      
-      // ✅ CRITICAL CHECK: Component might have unmounted while Razorpay was open
-      if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted after Razorpay, payment may have succeeded but cannot verify');
-        // Payment succeeded but component is gone - this is handled by the backend
-        return;
-      }
       
       console.log('✅ Payment successful!');
       console.log('Payment ID:', razorpayResponse.razorpay_payment_id);
@@ -297,12 +191,6 @@ export default function PayScreen({ route, navigation }: Props) {
       console.error('Error:', error);
       console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       
-      // ✅ Only show alerts if mounted
-      if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted, skipping error alert');
-        return;
-      }
-      
       // Handle different error types
       if (error.code === 0) {
         // User cancelled payment
@@ -313,11 +201,7 @@ export default function PayScreen({ route, navigation }: Props) {
           [
             {
               text: 'Try Again',
-              onPress: () => {
-                if (isMounted.current) {
-                  handlePayment();
-                }
-              }
+              onPress: () => handlePayment()
             },
             {
               text: 'Cancel',
@@ -334,11 +218,7 @@ export default function PayScreen({ route, navigation }: Props) {
           [
             {
               text: 'Retry',
-              onPress: () => {
-                if (isMounted.current) {
-                  handlePayment();
-                }
-              }
+              onPress: () => handlePayment()
             },
             {
               text: 'Cancel',
@@ -355,20 +235,19 @@ export default function PayScreen({ route, navigation }: Props) {
         );
       }
       
-      // ✅ Only update state if mounted
-      if (isMounted.current) {
-        setIsProcessingPayment(false);
-      }
+      setIsProcessingPayment(false);
     }
   };
 
-  /* STICKY FOOTER WITH DYNAMIC SAFE AREA */
+  /* ✅ STICKY FOOTER WITH DYNAMIC SAFE AREA */
   const renderFooter = useCallback(
     (props: any) => {
+      // ✅ Calculate dynamic bottom inset
       const bottomInset = insets.bottom > 0 ? insets.bottom + 8 : 20;
       
       return (
         <BottomSheetFooter {...props} bottomInset={bottomInset}>
+          {/* ✅ Wrapper with solid background */}
           <View style={styles.footerWrapper}>
             <View style={styles.footer}>
               <Pressable 
@@ -397,9 +276,10 @@ export default function PayScreen({ route, navigation }: Props) {
         </BottomSheetFooter>
       );
     },
-    [orderDetails.amount, isProcessingPayment, isVerifyingPayment, insets.bottom],
+    [orderDetails.amount, isProcessingPayment, isVerifyingPayment, insets.bottom], // ✅ Add insets.bottom to dependencies
   );
 
+  // ✅ Calculate dynamic spacer height
   const spacerHeight = 100 + (insets.bottom > 0 ? insets.bottom : 0);
 
   return (
@@ -415,9 +295,7 @@ export default function PayScreen({ route, navigation }: Props) {
         handleIndicatorStyle={styles.handleIndicator}
         onClose={() => {
           if (!isProcessingPayment && !isVerifyingPayment) {
-            if (isMounted.current && navigation.canGoBack()) {
-              navigation.goBack();
-            }
+            navigation.goBack();
           }
         }}
       >
@@ -484,6 +362,7 @@ export default function PayScreen({ route, navigation }: Props) {
             </Text>
           </View>
 
+          {/* ✅ Dynamic spacer - adapts to device safe area */}
           <View style={{ height: spacerHeight }} />
         </BottomSheetScrollView>
       </BottomSheet>
@@ -605,6 +484,7 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
   },
 
+  // ✅ NEW: Wrapper to ensure solid background
   footerWrapper: {
     backgroundColor: '#0F172A',
     paddingTop: 8,

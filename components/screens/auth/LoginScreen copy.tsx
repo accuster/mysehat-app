@@ -1,4 +1,4 @@
-// components/screens/auth/LoginScreen copy.tsx
+// components/screens/auth/LoginScreen.tsx
 /* eslint-disable no-catch-shadow */
 /* eslint-disable @typescript-eslint/no-shadow */
 /* eslint-disable react-native/no-inline-styles */
@@ -32,6 +32,13 @@ const packageJson = require('../../../package.json');
 const MSG91_WIDGET_ID = '356a676a4159343638343132';
 const MSG91_TOKEN_AUTH = '442931TIzX7UoX8cUH68ee3e82P1';
 
+// ============================================================================
+// 🧪 TEST MODE CONFIGURATION
+// ============================================================================
+const TEST_MOBILE = '9876543210'; // Test mobile without country code
+const TEST_OTP = '654321'; // Test OTP
+const TEST_MODE_ENABLED = true; // Set to false to disable test mode
+
 type Props = {
   navigation: any;
 };
@@ -45,7 +52,8 @@ export default function LoginScreen({ navigation }: Props) {
   const [phoneError, setPhoneError] = useState('');
   const [otpError, setOtpError] = useState('');
   const [resendTimer, setResendTimer] = useState(0);
-  const [reqId, setReqId] = useState<string | null>(null); // ✅ Store HEX reqId directly
+  const [reqId, setReqId] = useState<string | null>(null);
+  const [isTestMode, setIsTestMode] = useState(false); // Track if we're in test mode
   const [browser, setBrowser] = React.useState<{
     visible: boolean;
     url: string;
@@ -78,7 +86,7 @@ export default function LoginScreen({ navigation }: Props) {
     }
   }, [resendTimer]);
 
-  // Handle Redux errors - don't show alert, just log them
+  // Handle Redux errors
   useEffect(() => {
     if (error) {
       console.warn('Redux error:', error);
@@ -86,17 +94,56 @@ export default function LoginScreen({ navigation }: Props) {
     }
   }, [error, dispatch]);
 
+  // ============================================================================
+  // 🧪 CHECK IF TEST MOBILE
+  // ============================================================================
+  useEffect(() => {
+    if (TEST_MODE_ENABLED && phone === TEST_MOBILE) {
+      console.log('🧪 TEST MODE DETECTED');
+      setIsTestMode(true);
+    } else {
+      setIsTestMode(false);
+    }
+  }, [phone]);
+
   /**
-   * Send OTP via MSG91
+   * ============================================================================
+   * 🧪 HANDLE TEST MODE OTP SEND
+   * ============================================================================
+   */
+  const handleTestModeSendOtp = () => {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🧪 TEST MODE: Sending Test OTP');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('Test Mobile:', TEST_MOBILE);
+    console.log('Test OTP:', TEST_OTP);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
+    // Generate a test request ID
+    const testReqId = 'TEST_' + Date.now();
+    setReqId(testReqId);
+    
+    dispatch(setOtpSent(true));
+    setResendTimer(60);
+    
+    Alert.alert(
+      '🧪 Test Mode',
+      `This is a test account for Google Play Console.\n\nTest OTP: ${TEST_OTP}\n\nEnter this OTP to login.`,
+      [{ text: 'OK' }]
+    );
+  };
+
+  /**
+   * ============================================================================
+   * SEND OTP VIA MSG91 (PRODUCTION MODE)
+   * ============================================================================
    */
   const handleSendOtp = async () => {
     console.log('📤 Sending OTP to:', phone);
     
-    // Clear previous errors
     setPhoneError('');
     setOtpError('');
     
-    // Validate phone number
     if (!phone.trim()) {
       setPhoneError('Please enter your mobile number');
       return;
@@ -107,8 +154,18 @@ export default function LoginScreen({ navigation }: Props) {
       return;
     }
     
+    // ============================================================================
+    // 🧪 TEST MODE: Use test OTP flow
+    // ============================================================================
+    if (isTestMode) {
+      handleTestModeSendOtp();
+      return;
+    }
+    
+    // ============================================================================
+    // PRODUCTION MODE: Normal MSG91 flow
+    // ============================================================================
     try {
-      // Send OTP using MSG91 SDK
       const data = {
         identifier: `91${phone}`,
       };
@@ -119,10 +176,7 @@ export default function LoginScreen({ navigation }: Props) {
       console.log('✅ MSG91 Response:', response);
       
       if (response.type === 'success') {
-        // ✅ IMPORTANT: Store the HEX reqId directly from message field
-        // DO NOT decode it - MSG91 expects it in HEX format
         const hexReqId = response.message;
-        
         console.log('✅ Storing HEX reqId:', hexReqId);
         setReqId(hexReqId);
         
@@ -139,7 +193,9 @@ export default function LoginScreen({ navigation }: Props) {
   };
 
   /**
-   * Resend OTP
+   * ============================================================================
+   * RESEND OTP
+   * ============================================================================
    */
   const handleResendOtp = async () => {
     if (resendTimer > 0) return;
@@ -149,6 +205,17 @@ export default function LoginScreen({ navigation }: Props) {
     setOtp('');
     setReqId(null);
     
+    // ============================================================================
+    // 🧪 TEST MODE: Resend test OTP
+    // ============================================================================
+    if (isTestMode) {
+      handleTestModeSendOtp();
+      return;
+    }
+    
+    // ============================================================================
+    // PRODUCTION MODE: Normal MSG91 resend
+    // ============================================================================
     try {
       const data = {
         identifier: `91${phone}`,
@@ -158,7 +225,6 @@ export default function LoginScreen({ navigation }: Props) {
       
       if (response.type === 'success') {
         const hexReqId = response.message;
-        
         console.log('✅ New HEX reqId:', hexReqId);
         setReqId(hexReqId);
         setResendTimer(60);
@@ -173,15 +239,63 @@ export default function LoginScreen({ navigation }: Props) {
   };
 
   /**
-   * Verify OTP with MSG91 and login
+   * ============================================================================
+   * 🧪 VERIFY TEST OTP
+   * ============================================================================
+   */
+  const handleVerifyTestOtp = async () => {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🧪 TEST MODE: Verifying Test OTP');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('Entered OTP:', otp);
+    console.log('Expected OTP:', TEST_OTP);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
+    // Verify test OTP
+    if (otp !== TEST_OTP) {
+      setOtpError(`Invalid OTP. Test OTP is: ${TEST_OTP}`);
+      return;
+    }
+    
+    console.log('✅ Test OTP verified! Logging in...');
+    
+    // Generate test access token
+    const testAccessToken = `test_token_${phone}_${Date.now()}`;
+    
+    console.log('🔑 Sending test token to backend...');
+    
+    const resultAction = await dispatch(verifyLogin({
+      accessToken: testAccessToken,
+      mobile: phone,
+    }));
+    
+    if (verifyLogin.fulfilled.match(resultAction)) {
+      console.log('✅ Test login successful!');
+      
+      const userData = resultAction.payload;
+      
+      if (userData.requiresProfileSetup) {
+        console.log('📝 Redirecting to profile setup...');
+        navigation.replace('CompleteProfile');
+      } else {
+        console.log('🏠 Redirecting to home...');
+        navigation.replace('App');
+      }
+    } else {
+      setOtpError('Login failed. Please try again.');
+    }
+  };
+
+  /**
+   * ============================================================================
+   * VERIFY OTP WITH MSG91 (PRODUCTION MODE)
+   * ============================================================================
    */
   const handleVerifyOtp = async () => {
     console.log('🔐 Verifying OTP...');
     
-    // Clear previous errors
     setOtpError('');
     
-    // Validate OTP
     if (!otp.trim()) {
       setOtpError('Please enter the OTP');
       return;
@@ -192,13 +306,23 @@ export default function LoginScreen({ navigation }: Props) {
       return;
     }
     
+    // ============================================================================
+    // 🧪 TEST MODE: Verify test OTP
+    // ============================================================================
+    if (isTestMode) {
+      await handleVerifyTestOtp();
+      return;
+    }
+    
+    // ============================================================================
+    // PRODUCTION MODE: Normal MSG91 verification
+    // ============================================================================
     if (!reqId) {
       setOtpError('Session expired. Please resend OTP.');
       return;
     }
     
     try {
-      // ✅ Use the HEX reqId directly - DO NOT decode it
       const verifyData = {
         reqId: reqId,
         otp: otp,
@@ -220,7 +344,6 @@ export default function LoginScreen({ navigation }: Props) {
           verifyResponse.data?.['access-token'];
         
         console.log('✅ Got access token from MSG91');
-        console.log('Token (first 50 chars):', accessToken ? accessToken.substring(0, 50) + '...' : 'none');
         
         if (!accessToken) {
           setOtpError('No access token received. Please try again.');
@@ -250,7 +373,6 @@ export default function LoginScreen({ navigation }: Props) {
           setOtpError('Login failed. Please try again.');
         }
       } else {
-        // Handle MSG91 error codes - show friendly messages
         if (verifyResponse.code === 708) {
           setOtpError('OTP session expired. Please request a new OTP.');
         } else if (verifyResponse.message && verifyResponse.message.toLowerCase().includes('invalid')) {
@@ -262,7 +384,6 @@ export default function LoginScreen({ navigation }: Props) {
     } catch (error: any) {
       console.error('❌ Verify OTP error:', error);
       
-      // Show user-friendly error message
       if (error.message && error.message.toLowerCase().includes('invalid')) {
         setOtpError('Invalid OTP. Please check and try again.');
       } else if (error.message && error.message.toLowerCase().includes('expired')) {
@@ -293,6 +414,7 @@ export default function LoginScreen({ navigation }: Props) {
     setPhoneError('');
     setResendTimer(0);
     setReqId(null);
+    setIsTestMode(false);
   };
 
   return (
@@ -302,7 +424,6 @@ export default function LoginScreen({ navigation }: Props) {
     >
       <StatusBar barStyle="light-content" />
       
-      {/* IN-APP BROWSER */}
       <InAppBrowser
         visible={browser.visible}
         url={browser.url}
@@ -310,7 +431,6 @@ export default function LoginScreen({ navigation }: Props) {
         onClose={() => setBrowser({ visible: false, url: '', title: '' })}
       />
 
-      {/* LOADING OVERLAY */}
       <Modal transparent visible={isLoading} animationType="fade">
         <View style={styles.loaderOverlay}>
           <View style={styles.loaderCard}>
@@ -324,7 +444,6 @@ export default function LoginScreen({ navigation }: Props) {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* MAIN CONTENT */}
         <View style={styles.mainContent}>
           <View style={styles.header}>
             <StatusBar barStyle="light-content" />
@@ -334,7 +453,9 @@ export default function LoginScreen({ navigation }: Props) {
               resizeMode="contain"
             />
             <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Login with WhatsApp OTP</Text>
+            <Text style={styles.subtitle}>
+              {isTestMode ? '🧪 Test Mode - Google Play Testing' : 'Login with WhatsApp OTP'}
+            </Text>
           </View>
 
           <View style={styles.card}>
@@ -343,6 +464,7 @@ export default function LoginScreen({ navigation }: Props) {
             <View style={[
               styles.phoneRow,
               phoneError && styles.inputError,
+              isTestMode && styles.testModeInput,
             ]}>
               <Text style={styles.prefix}>+91</Text>
               <TextInput
@@ -357,10 +479,19 @@ export default function LoginScreen({ navigation }: Props) {
               />
             </View>
             
-            {/* Phone Error Message */}
             {phoneError ? (
               <Text style={styles.errorText}>{phoneError}</Text>
             ) : null}
+
+            {/* 🧪 TEST MODE INDICATOR */}
+            {isTestMode && !otpSent && (
+              <View style={styles.testModeAlert}>
+                <Text style={styles.testModeAlertText}>
+                  🧪 Test Mode Active{'\n'}
+                  For Google Play Console testing
+                </Text>
+              </View>
+            )}
 
             {/* OTP FLOW */}
             {!otpSent ? (
@@ -369,10 +500,13 @@ export default function LoginScreen({ navigation }: Props) {
                 disabled={!canSendOtp || isLoading}
                 style={[
                   styles.primaryBtn,
+                  isTestMode && styles.testModeButton,
                   (!canSendOtp || isLoading) && styles.btnDisabled,
                 ]}
               >
-                <Text style={styles.primaryBtnText}>Send OTP via WhatsApp</Text>
+                <Text style={styles.primaryBtnText}>
+                  {isTestMode ? '🧪 Send Test OTP' : 'Send OTP via WhatsApp'}
+                </Text>
               </Pressable>
             ) : (
               <>
@@ -380,23 +514,31 @@ export default function LoginScreen({ navigation }: Props) {
                 <TextInput
                   value={otp}
                   onChangeText={handleOtpChange}
-                  placeholder="Enter 4-6 digit OTP"
+                  placeholder={isTestMode ? 'Enter test OTP (654321)' : 'Enter 4-6 digit OTP'}
                   placeholderTextColor="#6B7280"
                   keyboardType="number-pad"
                   style={[
                     styles.input,
                     otpError && styles.inputError,
+                    isTestMode && styles.testModeInput,
                   ]}
                   maxLength={6}
                   autoFocus
                 />
                 
-                {/* OTP Error Message */}
                 {otpError ? (
                   <Text style={styles.errorText}>{otpError}</Text>
                 ) : null}
 
-                {/* RESEND OTP BUTTON */}
+                {/* 🧪 TEST OTP HINT */}
+                {isTestMode && (
+                  <View style={styles.testOtpHint}>
+                    <Text style={styles.testOtpHintText}>
+                      💡 Test OTP: {TEST_OTP}
+                    </Text>
+                  </View>
+                )}
+
                 <Pressable
                   onPress={handleResendOtp}
                   disabled={resendTimer > 0 || isLoading}
@@ -408,19 +550,24 @@ export default function LoginScreen({ navigation }: Props) {
                   ]}>
                     {resendTimer > 0 
                       ? `Resend OTP in ${resendTimer}s` 
-                      : 'Resend OTP'}
+                      : isTestMode 
+                        ? '🧪 Resend Test OTP'
+                        : 'Resend OTP'}
                   </Text>
                 </Pressable>
 
                 <Pressable
                   onPress={handleVerifyOtp}
-                  disabled={otp.length < 4 || isLoading || !reqId}
+                  disabled={otp.length < 4 || isLoading || (!isTestMode && !reqId)}
                   style={[
                     styles.primaryBtn,
-                    (otp.length < 4 || isLoading || !reqId) && styles.btnDisabled,
+                    isTestMode && styles.testModeButton,
+                    (otp.length < 4 || isLoading || (!isTestMode && !reqId)) && styles.btnDisabled,
                   ]}
                 >
-                  <Text style={styles.primaryBtnText}>Verify & Login</Text>
+                  <Text style={styles.primaryBtnText}>
+                    {isTestMode ? '🧪 Verify Test OTP' : 'Verify & Login'}
+                  </Text>
                 </Pressable>
 
                 <Pressable
@@ -435,7 +582,7 @@ export default function LoginScreen({ navigation }: Props) {
           </View>
         </View>
 
-        {/* FOOTER - Fixed at Bottom */}
+        {/* FOOTER */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>
             By continuing, you agree to our{' '}
@@ -466,7 +613,6 @@ export default function LoginScreen({ navigation }: Props) {
             </Text>
           </Text>
 
-          {/* VERSION */}
           <Text style={styles.versionText}>Version v{packageJson.version}</Text>
         </View>
       </ScrollView>
@@ -634,5 +780,41 @@ const styles = StyleSheet.create({
     minWidth: 200,
     borderWidth: 1,
     borderColor: '#1F2937',
+  },
+  // 🧪 TEST MODE STYLES
+  testModeInput: {
+    borderColor: '#10B981',
+    borderWidth: 2,
+  },
+  testModeButton: {
+    backgroundColor: '#10B981',
+  },
+  testModeAlert: {
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderColor: '#10B981',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 12,
+  },
+  testModeAlertText: {
+    color: '#10B981',
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  testOtpHint: {
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderColor: '#10B981',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 8,
+    marginTop: 8,
+  },
+  testOtpHintText: {
+    color: '#10B981',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
   },
 });

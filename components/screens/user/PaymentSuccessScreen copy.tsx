@@ -1,5 +1,5 @@
 // components/screens/user/PaymentSuccessScreen.tsx
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -7,19 +7,14 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
-  BackHandler,
-} from 'react-native';
-import { X, Share2, Download, HelpCircle } from 'lucide-react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAppDispatch, useAppSelector } from '../../../store/hook';
-import { fetchReportById } from '../../../store/slices/reportSlice';
+} from "react-native";
+import { X, Share2, Download, HelpCircle } from "lucide-react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useAppDispatch, useAppSelector } from "../../../store/hook";
+import { fetchReportById } from "../../../store/slices/reportSlice";
 
 export default function PaymentSuccessScreen({ navigation, route }: any) {
   const dispatch = useAppDispatch();
-  
-  // ✅ Add isMounted ref
-  const isMounted = useRef(true);
-  
   const [isFetchingReport, setIsFetchingReport] = useState(false);
   
   // ✅ DEBUG: Log everything from route params
@@ -29,12 +24,12 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
   console.log('Route params:', JSON.stringify(route.params, null, 2));
   
   const {
-    amountLabel = '₹199',
-    refNumber = 'N/A',
+    amountLabel = "₹199",
+    refNumber = "N/A",
     paymentTime = new Date().toLocaleString(),
-    paymentMethod = 'Razorpay',
-    senderName = 'User',
-    reportId,
+    paymentMethod = "Razorpay",
+    senderName = "User",
+    reportId, // ✅ This comes from PayScreen
     paymentId,
   } = route.params || {};
 
@@ -45,69 +40,14 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
   console.log('  paymentId:', paymentId);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-  // ✅ FIX: Rename 'error' to 'fetchError' to avoid ESLint shadow warning
-  const { selectedReport, isLoading, error: fetchError } = useAppSelector((state) => state.reports);
+  // Get report from Redux store
+  const { selectedReport, isLoading, error } = useAppSelector((state) => state.reports);
 
   console.log('Redux state:');
   console.log('  selectedReport:', selectedReport ? 'EXISTS' : 'NULL');
   console.log('  isLoading:', isLoading);
-  console.log('  fetchError:', fetchError);
+  console.log('  error:', error);
 
-  // ✅ Setup and cleanup
-  useEffect(() => {
-    isMounted.current = true;
-    
-    console.log('💳 PaymentSuccessScreen: Component mounted');
-
-    return () => {
-      console.log('🧹 PaymentSuccessScreen: Unmounting...');
-      isMounted.current = false;
-      
-      // Cancel any pending operations
-      if (isFetchingReport) {
-        console.warn('⚠️ Component unmounted during report fetch');
-      }
-    };
-  }, [isFetchingReport]);
-
-  // ✅ Handle hardware back button - Navigate to Home, NOT back to PayScreen
-  useEffect(() => {
-    const backAction = () => {
-      console.log('⬅️ HARDWARE BACK: PaymentSuccessScreen');
-      console.log('🏠 Navigating to Home (popToTop) to prevent going back to PayScreen');
-      
-      // ✅ CRITICAL: Navigate to Home, NOT back to PayScreen
-      // This prevents users from accidentally initiating duplicate payments
-      if (isMounted.current) {
-        try {
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'App' }],
-          });
-        } catch (navError) {
-          console.error('❌ Navigation error:', navError);
-          // Fallback: try popToTop
-          try {
-            navigation.popToTop();
-          } catch (fallbackError) {
-            console.error('❌ Fallback navigation also failed:', fallbackError);
-          }
-        }
-        return true; // Prevent default back
-      }
-      
-      return false;
-    };
-
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      backAction
-    );
-
-    return () => backHandler.remove();
-  }, [navigation]);
-
-  // Fetch report data
   useEffect(() => {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('📄 PaymentSuccessScreen useEffect TRIGGERED');
@@ -117,12 +57,6 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
     
     // Fetch report data if reportId is provided
     if (reportId) {
-      // ✅ Check if mounted before starting
-      if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted, aborting report fetch');
-        return;
-      }
-      
       console.log('✅ reportId exists, fetching report data...');
       console.log('🔄 Fetching report data for:', reportId);
       setIsFetchingReport(true);
@@ -130,12 +64,6 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
       dispatch(fetchReportById(reportId))
         .unwrap()
         .then((fetchedReport) => {
-          // ✅ Check if still mounted after async operation
-          if (!isMounted.current) {
-            console.warn('⚠️ Component unmounted after report fetch, skipping state update');
-            return;
-          }
-          
           console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
           console.log('✅ Report fetched successfully!');
           console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -143,18 +71,11 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
           setIsFetchingReport(false);
         })
         .catch((err) => {
-          // ✅ Check if still mounted before showing alert
-          if (!isMounted.current) {
-            console.warn('⚠️ Component unmounted, skipping error alert');
-            return;
-          }
-          
           console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
           console.error('❌ Failed to fetch report');
           console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
           console.error('Error:', err);
           setIsFetchingReport(false);
-          
           Alert.alert(
             'Error',
             'Failed to load report data. You can try viewing it from the Reports tab.',
@@ -167,19 +88,13 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
       console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.warn('Full route.params:', route.params);
     }
-  }, [reportId, paymentId, dispatch]);
+  }, [reportId, dispatch]);
 
   const onViewReport = () => {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('👆 View Report button clicked');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('selectedReport state:', selectedReport ? 'EXISTS' : 'NULL');
-    
-    // ✅ Check if mounted
-    if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting navigation');
-      return;
-    }
     
     if (!selectedReport) {
       console.error('❌ selectedReport is null!');
@@ -223,60 +138,12 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
 
       console.log('✅ Transformed report data:', JSON.stringify(reportData, null, 2));
 
-      // ✅ Safe navigation with try-catch
-      try {
-        navigation.navigate('Report', {
-          data: reportData,
-        });
-      } catch (navError) {
-        console.error('❌ Navigation error:', navError);
-        Alert.alert('Error', 'Failed to open report. Please try again from the Reports tab.');
-      }
+      navigation.navigate("Report", {
+        data: reportData,
+      });
     } catch (transformError) {
       console.error('❌ Error transforming report data:', transformError);
-      
-      // ✅ Only show alert if mounted
-      if (isMounted.current) {
-        Alert.alert('Error', 'Failed to prepare report data');
-      }
-    }
-  };
-
-  // ✅ Safe navigation helper
-  const handleNavigation = (screen: string) => {
-    if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting navigation');
-      return;
-    }
-    
-    try {
-      navigation.navigate(screen);
-    } catch (error) {
-      console.error('❌ Navigation error:', error);
-    }
-  };
-
-  // ✅ Safe popToTop helper
-  const handleClose = () => {
-    if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting navigation');
-      return;
-    }
-    
-    try {
-      // Navigate to Home, NOT back to PayScreen
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'App' }],
-      });
-    } catch (error) {
-      console.error('❌ Navigation error:', error);
-      // Fallback
-      try {
-        navigation.popToTop();
-      } catch (fallbackError) {
-        console.error('❌ Fallback also failed:', fallbackError);
-      }
+      Alert.alert('Error', 'Failed to prepare report data');
     }
   };
 
@@ -284,7 +151,7 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
     <SafeAreaView style={styles.root}>
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={handleClose}>
+        <Pressable onPress={() => navigation.popToTop()}>
           <X size={22} color="#CBD5E1" />
         </Pressable>
         <Pressable>
@@ -329,7 +196,7 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
       {/* Support */}
       <Pressable
         style={styles.supportCard}
-        onPress={() => handleNavigation('Support')}
+        onPress={() => navigation.navigate("Support")}
       >
         <HelpCircle size={20} color="#CBD5E1" />
         <View style={styles.supportTextWrap}>
@@ -358,9 +225,9 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
       </Pressable>
 
       {/* Error Message */}
-      {fetchError && (
+      {error && (
         <View style={styles.errorBox}>
-          <Text style={styles.errorText}>⚠️ {fetchError}</Text>
+          <Text style={styles.errorText}>⚠️ {error}</Text>
         </View>
       )}
     </SafeAreaView>
@@ -379,123 +246,123 @@ function Info({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#020617',
+    backgroundColor: "#020617",
     padding: 16,
   },
 
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: 12,
   },
 
   card: {
-    backgroundColor: '#1A2332',
+    backgroundColor: "#1A2332",
     borderRadius: 20,
     padding: 20,
-    position: 'relative',
-    overflow: 'hidden',
+    position: "relative",
+    overflow: "hidden",
   },
 
   iconWrap: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#22C55E',
-    alignSelf: 'center',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#22C55E",
+    alignSelf: "center",
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 12,
   },
 
   check: {
     fontSize: 30,
-    fontWeight: '900',
-    color: '#FFFFFF',
+    fontWeight: "900",
+    color: "#FFFFFF",
   },
 
   title: {
     fontSize: 19,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    textAlign: 'center',
+    fontWeight: "800",
+    color: "#FFFFFF",
+    textAlign: "center",
   },
 
   subtitle: {
     fontSize: 12,
-    color: '#64748B',
-    textAlign: 'center',
+    color: "#64748B",
+    textAlign: "center",
     marginTop: 4,
   },
 
   divider: {
     height: 1,
-    backgroundColor: '#1E293B',
+    backgroundColor: "#1E293B",
     marginVertical: 14,
   },
 
   totalLabel: {
     fontSize: 12,
-    color: '#94A3B8',
-    textAlign: 'center',
+    color: "#94A3B8",
+    textAlign: "center",
   },
 
   amount: {
     fontSize: 32,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    textAlign: 'center',
+    fontWeight: "900",
+    color: "#FFFFFF",
+    textAlign: "center",
     marginTop: 4,
     marginBottom: 2,
   },
 
   // 2-COLUMN GRID LAYOUT
   infoGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
     marginTop: 16,
   },
 
   infoItem: {
-    backgroundColor: '#0A1628',
+    backgroundColor: "#0A1628",
     borderRadius: 10,
     padding: 12,
     paddingVertical: 10,
     flex: 1,
-    minWidth: '47%',
+    minWidth: "47%",
   },
 
   infoLabel: {
     fontSize: 10,
-    color: '#64748B',
+    color: "#64748B",
     marginBottom: 3,
   },
 
   infoValue: {
     fontSize: 12,
-    color: '#FFFFFF',
-    fontWeight: '600',
+    color: "#FFFFFF",
+    fontWeight: "600",
   },
 
   receiptRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
     gap: 8,
   },
 
   receiptText: {
-    color: '#E5E7EB',
-    fontWeight: '600',
+    color: "#E5E7EB",
+    fontWeight: "600",
     fontSize: 13,
   },
 
   supportCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
-    backgroundColor: '#1A2332',
+    backgroundColor: "#1A2332",
     borderRadius: 14,
     padding: 16,
     marginTop: 14,
@@ -506,54 +373,54 @@ const styles = StyleSheet.create({
   },
 
   supportTitle: {
-    color: '#FFFFFF',
-    fontWeight: '700',
+    color: "#FFFFFF",
+    fontWeight: "700",
     fontSize: 14,
   },
 
   supportSubtitle: {
-    color: '#64748B',
+    color: "#64748B",
     fontSize: 11,
     marginTop: 2,
   },
 
   cta: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: "#7C3AED",
     borderRadius: 16,
     paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 'auto',
+    alignItems: "center",
+    marginTop: "auto",
   },
 
   ctaDisabled: {
-    backgroundColor: '#475569',
+    backgroundColor: "#475569",
   },
 
   ctaText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: "800",
   },
 
   loadingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
 
   errorBox: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: "#FEF2F2",
     borderRadius: 12,
     padding: 12,
     marginTop: 12,
     borderWidth: 1,
-    borderColor: '#FCA5A5',
+    borderColor: "#FCA5A5",
   },
 
   errorText: {
-    color: '#991B1B',
+    color: "#991B1B",
     fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
+    fontWeight: "600",
+    textAlign: "center",
   },
 });

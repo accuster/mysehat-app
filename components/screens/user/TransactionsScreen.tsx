@@ -1,6 +1,6 @@
 // components/screens/user/TransactionsScreen.tsx
 /* eslint-disable react-native/no-inline-styles */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,20 +13,24 @@ import {
   Modal,
   ScrollView,
   Platform,
+  BackHandler,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import { useAppDispatch, useAppSelector } from '../../../store/hook';
 import { fetchTransactions } from '../../../store/slices/transactionSlice';
-import { 
-  ArrowDownLeft, 
-  ArrowUpRight, 
-  ArrowLeft, 
-  Search, 
-  SlidersHorizontal, 
-  X, 
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  ArrowLeft,
+  Search,
+  SlidersHorizontal,
+  X,
   Calendar,
   CreditCard,
-  DollarSign 
+  DollarSign,
 } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
@@ -46,20 +50,26 @@ type FilterOptions = {
 export default function TransactionsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const dispatch = useAppDispatch();
-  
+
+  // ✅ ADD THIS
+  const isMounted = useRef(true);
+
   // Redux state
-  const { transactions, isLoading, error } = useAppSelector((state) => state.transactions);
-  
+  const { transactions, isLoading, error } = useAppSelector(
+    state => state.transactions,
+  );
+
   // Local state
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filteredTransactions, setFilteredTransactions] = useState(transactions);
+  const [filteredTransactions, setFilteredTransactions] =
+    useState(transactions);
   const [showFilterModal, setShowFilterModal] = useState(false);
-  
+
   // Date picker states
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
-  
+
   // Filter state
   const [filters, setFilters] = useState<FilterOptions>({
     dateRange: 'all',
@@ -72,11 +82,35 @@ export default function TransactionsScreen({ navigation }: Props) {
 
   const [activeFiltersCount, setActiveFiltersCount] = useState(0);
 
-  // Fetch transactions on mount
+  // ✅ UPDATE this useEffect
   useEffect(() => {
+    isMounted.current = true;
+
     console.log('💳 TransactionsScreen: Component mounted');
     dispatch(fetchTransactions());
+
+    return () => {
+      console.log('🧹 TransactionsScreen: Unmounting...');
+      isMounted.current = false;
+    };
   }, [dispatch]);
+
+  // Handle hardware back button
+  useEffect(() => {
+    const backAction = () => {
+      console.log('⬅️ HARDWARE BACK: TransactionsScreen');
+      if (isMounted.current && navigation.canGoBack()) {
+        navigation.goBack();
+        return true;
+      }
+      return false;
+    };
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction,
+    );
+    return () => backHandler.remove();
+  }, [navigation]);
 
   // Apply filters and search
   useEffect(() => {
@@ -85,24 +119,24 @@ export default function TransactionsScreen({ navigation }: Props) {
     // Apply search filter
     if (searchQuery.trim() !== '') {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter((txn) => {
+      filtered = filtered.filter(txn => {
         // ✅ Safely handle null/undefined values
         const transactionId = txn.transaction_id?.toLowerCase() || '';
         const paymentMethod = txn.payment_method?.toLowerCase() || '';
-        
-        return (
-          transactionId.includes(query) ||
-          paymentMethod.includes(query)
-        );
+
+        return transactionId.includes(query) || paymentMethod.includes(query);
       });
     }
 
     // Apply date filter
-    if (filters.dateRange === 'custom' && (filters.startDate || filters.endDate)) {
-      filtered = filtered.filter((txn) => {
+    if (
+      filters.dateRange === 'custom' &&
+      (filters.startDate || filters.endDate)
+    ) {
+      filtered = filtered.filter(txn => {
         const txnDate = new Date(txn.report_date);
         txnDate.setHours(0, 0, 0, 0);
-        
+
         if (filters.startDate && filters.endDate) {
           const start = new Date(filters.startDate);
           start.setHours(0, 0, 0, 0);
@@ -122,9 +156,9 @@ export default function TransactionsScreen({ navigation }: Props) {
       });
     } else if (filters.dateRange !== 'all' && filters.dateRange !== 'custom') {
       const now = new Date();
-      filtered = filtered.filter((txn) => {
+      filtered = filtered.filter(txn => {
         const txnDate = new Date(txn.report_date);
-        
+
         switch (filters.dateRange) {
           case 'today':
             return txnDate.toDateString() === now.toDateString();
@@ -145,15 +179,19 @@ export default function TransactionsScreen({ navigation }: Props) {
 
     // Apply payment method filter
     if (filters.paymentMethod !== 'all') {
-      filtered = filtered.filter((txn) => txn.payment_method === filters.paymentMethod);
+      filtered = filtered.filter(
+        txn => txn.payment_method === filters.paymentMethod,
+      );
     }
 
     // Apply amount range filter
     if (filters.amountMin !== '' || filters.amountMax !== '') {
-      filtered = filtered.filter((txn) => {
+      filtered = filtered.filter(txn => {
         const amount = txn.fee;
-        const min = filters.amountMin !== '' ? parseFloat(filters.amountMin) : 0;
-        const max = filters.amountMax !== '' ? parseFloat(filters.amountMax) : 999999;
+        const min =
+          filters.amountMin !== '' ? parseFloat(filters.amountMin) : 0;
+        const max =
+          filters.amountMax !== '' ? parseFloat(filters.amountMax) : 999999;
         return amount >= min && amount <= max;
       });
     }
@@ -173,12 +211,22 @@ export default function TransactionsScreen({ navigation }: Props) {
     console.log('🔄 TransactionsScreen: Refreshing transactions...');
     setRefreshing(true);
     await dispatch(fetchTransactions());
-    setRefreshing(false);
+    // ✅ CHECK BEFORE setState
+    if (isMounted.current) {
+      setRefreshing(false);
+    }
   };
 
-  // Handle back navigation
+  // // Handle back navigation
+  // const handleBack = () => {
+  //   navigation.goBack();
+  // };
+
+  // ✅ FIX handleBack
   const handleBack = () => {
-    navigation.goBack();
+    if (isMounted.current && navigation.canGoBack()) {
+      navigation.goBack();
+    }
   };
 
   // Handle filter button press
@@ -188,8 +236,8 @@ export default function TransactionsScreen({ navigation }: Props) {
 
   // Handle date range change
   const handleDateRangeChange = (value: any) => {
-    setFilters({ 
-      ...filters, 
+    setFilters({
+      ...filters,
       dateRange: value,
       startDate: value === 'custom' ? filters.startDate : null,
       endDate: value === 'custom' ? filters.endDate : null,
@@ -232,20 +280,20 @@ export default function TransactionsScreen({ navigation }: Props) {
   // Format date for display
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-GB', { 
-      day: 'numeric', 
-      month: 'short', 
-      year: 'numeric' 
+    return date.toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
     });
   };
 
   // Format time for display
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
       minute: '2-digit',
-      hour12: true 
+      hour12: true,
     });
   };
 
@@ -392,24 +440,24 @@ export default function TransactionsScreen({ navigation }: Props) {
             renderItem={({ item }) => {
               // ✅ Safely handle null payment_method
               const paymentMethod = item.payment_method || 'Unknown';
-              const isCredit = paymentMethod === 'UPI' || 
-                              paymentMethod === 'Razorpay' || 
-                              paymentMethod === 'Card' ||
-                              paymentMethod === 'NetBanking';
-              
+              const isCredit =
+                paymentMethod === 'UPI' ||
+                paymentMethod === 'Razorpay' ||
+                paymentMethod === 'Card' ||
+                paymentMethod === 'NetBanking';
+
               const Icon = isCredit ? ArrowDownLeft : ArrowUpRight;
               const title = 'BMI Report Purchase';
               const iconColor = isCredit ? '#10B981' : '#F59E0B';
-              const iconBg = isCredit ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)';
+              const iconBg = isCredit
+                ? 'rgba(16, 185, 129, 0.15)'
+                : 'rgba(245, 158, 11, 0.15)';
               const amountColor = isCredit ? '#10B981' : '#F59E0B';
 
               return (
                 <View style={styles.card}>
                   <View
-                    style={[
-                      styles.iconContainer,
-                      { backgroundColor: iconBg },
-                    ]}
+                    style={[styles.iconContainer, { backgroundColor: iconBg }]}
                   >
                     <Icon size={22} color={iconColor} strokeWidth={2.5} />
                   </View>
@@ -418,7 +466,8 @@ export default function TransactionsScreen({ navigation }: Props) {
                     <Text style={styles.txnTitle}>{title}</Text>
 
                     <Text style={styles.txnDate}>
-                      {formatDate(item.report_date)} • {formatTime(item.report_date)}
+                      {formatDate(item.report_date)} •{' '}
+                      {formatTime(item.report_date)}
                     </Text>
 
                     <Text style={styles.txnId}>
@@ -426,12 +475,7 @@ export default function TransactionsScreen({ navigation }: Props) {
                     </Text>
                   </View>
 
-                  <Text
-                    style={[
-                      styles.txnAmount,
-                      { color: amountColor },
-                    ]}
-                  >
+                  <Text style={[styles.txnAmount, { color: amountColor }]}>
                     {isCredit ? '+' : '-'}₹{item.fee.toFixed(0)}
                   </Text>
                 </View>
@@ -472,19 +516,21 @@ export default function TransactionsScreen({ navigation }: Props) {
                     { label: 'Last 30 Days', value: 'month' },
                     { label: 'Last Year', value: 'year' },
                     { label: 'Custom Range', value: 'custom' },
-                  ].map((option) => (
+                  ].map(option => (
                     <TouchableOpacity
                       key={option.value}
                       style={[
                         styles.filterOption,
-                        filters.dateRange === option.value && styles.filterOptionActive,
+                        filters.dateRange === option.value &&
+                          styles.filterOptionActive,
                       ]}
                       onPress={() => handleDateRangeChange(option.value)}
                     >
                       <Text
                         style={[
                           styles.filterOptionText,
-                          filters.dateRange === option.value && styles.filterOptionTextActive,
+                          filters.dateRange === option.value &&
+                            styles.filterOptionTextActive,
                         ]}
                       >
                         {option.label}
@@ -539,19 +585,26 @@ export default function TransactionsScreen({ navigation }: Props) {
                     { label: 'Razorpay', value: 'Razorpay' },
                     { label: 'Net Banking', value: 'NetBanking' },
                     { label: 'Wallet', value: 'Wallet' },
-                  ].map((option) => (
+                  ].map(option => (
                     <TouchableOpacity
                       key={option.value}
                       style={[
                         styles.filterOption,
-                        filters.paymentMethod === option.value && styles.filterOptionActive,
+                        filters.paymentMethod === option.value &&
+                          styles.filterOptionActive,
                       ]}
-                      onPress={() => setFilters({ ...filters, paymentMethod: option.value as any })}
+                      onPress={() =>
+                        setFilters({
+                          ...filters,
+                          paymentMethod: option.value as any,
+                        })
+                      }
                     >
                       <Text
                         style={[
                           styles.filterOptionText,
-                          filters.paymentMethod === option.value && styles.filterOptionTextActive,
+                          filters.paymentMethod === option.value &&
+                            styles.filterOptionTextActive,
                         ]}
                       >
                         {option.label}
@@ -575,7 +628,9 @@ export default function TransactionsScreen({ navigation }: Props) {
                       placeholder="e.g., 100"
                       placeholderTextColor="#71717A"
                       value={filters.amountMin}
-                      onChangeText={(text) => setFilters({ ...filters, amountMin: text })}
+                      onChangeText={text =>
+                        setFilters({ ...filters, amountMin: text })
+                      }
                       keyboardType="decimal-pad"
                     />
                   </View>
@@ -587,7 +642,9 @@ export default function TransactionsScreen({ navigation }: Props) {
                       placeholder="e.g., 1000"
                       placeholderTextColor="#71717A"
                       value={filters.amountMax}
-                      onChangeText={(text) => setFilters({ ...filters, amountMax: text })}
+                      onChangeText={text =>
+                        setFilters({ ...filters, amountMax: text })
+                      }
                       keyboardType="decimal-pad"
                     />
                   </View>
@@ -643,7 +700,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0A0A0A',
   },
-  
+
   header: {
     height: 56,
     flexDirection: 'row',
@@ -727,12 +784,12 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
   },
-  
+
   content: {
     flex: 1,
     padding: 16,
   },
-  
+
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -794,7 +851,7 @@ const styles = StyleSheet.create({
     color: '#71717A',
     fontSize: 14,
   },
-  
+
   card: {
     backgroundColor: '#18181B',
     borderRadius: 16,

@@ -1,9 +1,8 @@
 // store/services/orderApi.ts
 import axios, { AxiosInstance } from 'axios';
 import { storage } from '../../utils/storage';
+import { API_BASE_URL } from '../constant';
 
-// Your backend API URL
-const API_BASE_URL = 'https://sandbox.mysehat.ai/api';
 
 interface OrderResponse {
   success: boolean;

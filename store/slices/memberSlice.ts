@@ -1,22 +1,24 @@
 // store/slices/memberSlice.ts
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { 
-  memberApi, 
-  Member, 
-  CreateMemberRequest, 
+import {
+  memberApi,
+  Member,
+  CreateMemberRequest,
   UpdateMemberRequest,
-  UpdateProfileRequest, 
+  UpdateProfileRequest,
 } from '../services/memberApi';
 
-// ✅ UPDATED: Member state interface with profile update state
+// Types
 export interface MemberState {
   members: Member[];
   isLoading: boolean;
   error: string | null;
   selectedMember: Member | null;
-  // ✅ NEW: Profile update state
   isUpdatingProfile: boolean;
   profileUpdateError: string | null;
+  myProfile: Member | null;
+  isLoadingProfile: boolean;
+  profileError: string | null;
 }
 
 // Initial state
@@ -25,9 +27,11 @@ const initialState: MemberState = {
   isLoading: false,
   error: null,
   selectedMember: null,
-  // ✅ NEW
   isUpdatingProfile: false,
   profileUpdateError: null,
+  myProfile: null,
+  isLoadingProfile: false,
+  profileError: null,
 };
 
 // Async thunks
@@ -42,16 +46,38 @@ export const fetchMembers = createAsyncThunk(
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('📋 Redux: Fetching members');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      
+
       const members = await memberApi.getAllMembers();
-      
+
       console.log('✅ Members fetched:', members.length);
       return members;
     } catch (error: any) {
       console.error('❌ Error in fetchMembers:', error.message);
       return rejectWithValue(error.message);
     }
-  }
+  },
+);
+
+/**
+ * ✅ NEW: Fetch logged-in user's profile (optimized)
+ */
+export const fetchMyProfile = createAsyncThunk(
+  'members/fetchMyProfile',
+  async (_, { rejectWithValue }) => {
+    try {
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('👤 Redux: Fetching my profile');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+      const profile = await memberApi.getMyProfile();
+
+      console.log('✅ Profile fetched:', profile.name);
+      return profile;
+    } catch (error: any) {
+      console.error('❌ Error in fetchMyProfile:', error.message);
+      return rejectWithValue(error.message);
+    }
+  },
 );
 
 /**
@@ -65,16 +91,16 @@ export const createMember = createAsyncThunk(
       console.log('➕ Redux: Creating member');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('Data:', data);
-      
+
       const member = await memberApi.createMember(data);
-      
+
       console.log('✅ Member created:', member.id);
       return member;
     } catch (error: any) {
       console.error('❌ Error in createMember:', error.message);
       return rejectWithValue(error.message);
     }
-  }
+  },
 );
 
 /**
@@ -82,23 +108,26 @@ export const createMember = createAsyncThunk(
  */
 export const updateMember = createAsyncThunk(
   'members/update',
-  async ({ id, data }: { id: string; data: UpdateMemberRequest }, { rejectWithValue }) => {
+  async (
+    { id, data }: { id: string; data: UpdateMemberRequest },
+    { rejectWithValue },
+  ) => {
     try {
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('✏️ Redux: Updating member');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('ID:', id);
       console.log('Data:', data);
-      
+
       const member = await memberApi.updateMember(id, data);
-      
+
       console.log('✅ Member updated:', member.id);
       return member;
     } catch (error: any) {
       console.error('❌ Error in updateMember:', error.message);
       return rejectWithValue(error.message);
     }
-  }
+  },
 );
 
 /**
@@ -112,16 +141,16 @@ export const deleteMember = createAsyncThunk(
       console.log('🗑️ Redux: Deleting member');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('ID:', id);
-      
+
       await memberApi.deleteMember(id);
-      
+
       console.log('✅ Member deleted');
       return id;
     } catch (error: any) {
       console.error('❌ Error in deleteMember:', error.message);
       return rejectWithValue(error.message);
     }
-  }
+  },
 );
 
 // ============================================================================
@@ -139,21 +168,21 @@ export const updateProfile = createAsyncThunk(
       console.log('👤 Redux: Updating Profile');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('Update data:', data);
-      
+
       const updatedProfile = await memberApi.updateProfile(data);
-      
+
       console.log('✅ Profile updated successfully');
       console.log('Updated profile:', updatedProfile);
-      
+
       // ✅ After successful profile update, refresh members list
       // This ensures SuperUser in members list is updated
       console.log('🔄 Refreshing members list...');
       await dispatch(fetchMembers());
-      
+
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('✅ PROFILE UPDATE COMPLETED');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      
+
       return updatedProfile;
     } catch (error: any) {
       console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -162,7 +191,7 @@ export const updateProfile = createAsyncThunk(
       console.error('Error:', error.message);
       return rejectWithValue(error.message);
     }
-  }
+  },
 );
 
 // Slice
@@ -170,24 +199,25 @@ const memberSlice = createSlice({
   name: 'members',
   initialState,
   reducers: {
-    clearError: (state) => {
+    clearError: state => {
       state.error = null;
-      state.profileUpdateError = null; // ✅ Clear profile error too
+      state.profileUpdateError = null;
+      state.profileError = null;
     },
     setSelectedMember: (state, action: PayloadAction<Member | null>) => {
       state.selectedMember = action.payload;
     },
-    clearMembers: (state) => {
+    clearMembers: state => {
       state.members = [];
       state.error = null;
       state.selectedMember = null;
-      state.profileUpdateError = null; // ✅ Clear profile error
+      state.profileUpdateError = null;
     },
   },
-  extraReducers: (builder) => {
+  extraReducers: builder => {
     // Fetch Members
     builder
-      .addCase(fetchMembers.pending, (state) => {
+      .addCase(fetchMembers.pending, state => {
         console.log('🔄 fetchMembers: pending');
         state.isLoading = true;
         state.error = null;
@@ -203,9 +233,29 @@ const memberSlice = createSlice({
         state.error = action.payload as string;
       });
 
+    // ============================================================================
+    // ✅ NEW: Fetch My Profile Reducers
+    // ============================================================================
+    builder
+      .addCase(fetchMyProfile.pending, state => {
+        console.log('🔄 fetchMyProfile: pending');
+        state.isLoadingProfile = true;
+        state.profileError = null;
+      })
+      .addCase(fetchMyProfile.fulfilled, (state, action) => {
+        console.log('✅ fetchMyProfile: fulfilled');
+        state.isLoadingProfile = false;
+        state.myProfile = action.payload;
+      })
+      .addCase(fetchMyProfile.rejected, (state, action) => {
+        console.error('❌ fetchMyProfile: rejected');
+        state.isLoadingProfile = false;
+        state.profileError = action.payload as string;
+      });
+
     // Create Member
     builder
-      .addCase(createMember.pending, (state) => {
+      .addCase(createMember.pending, state => {
         console.log('🔄 createMember: pending');
         state.isLoading = true;
         state.error = null;
@@ -223,7 +273,7 @@ const memberSlice = createSlice({
 
     // Update Member
     builder
-      .addCase(updateMember.pending, (state) => {
+      .addCase(updateMember.pending, state => {
         console.log('🔄 updateMember: pending');
         state.isLoading = true;
         state.error = null;
@@ -247,7 +297,7 @@ const memberSlice = createSlice({
 
     // Delete Member
     builder
-      .addCase(deleteMember.pending, (state) => {
+      .addCase(deleteMember.pending, state => {
         console.log('🔄 deleteMember: pending');
         state.isLoading = true;
         state.error = null;
@@ -267,20 +317,34 @@ const memberSlice = createSlice({
       });
 
     // ============================================================================
-    // ✅ NEW: Update Profile Reducers
+    // ✅ FIXED: Update Profile Reducers (ALL THREE CASES)
     // ============================================================================
     builder
-      .addCase(updateProfile.pending, (state) => {
+      .addCase(updateProfile.pending, state => {
         console.log('🔄 updateProfile: pending');
         state.isUpdatingProfile = true;
         state.profileUpdateError = null;
       })
       .addCase(updateProfile.fulfilled, (state, action) => {
         console.log('✅ updateProfile: fulfilled');
-        state.isUpdatingProfile = false;
-        
-        // ✅ Update SuperUser in members array with new data
-        const superUserIndex = state.members.findIndex(m => m.userType === 'SuperUser');
+        state.isUpdatingProfile = false; // ✅ ADDED THIS
+
+        // Update myProfile
+        if (state.myProfile) {
+          state.myProfile = {
+            ...state.myProfile,
+            name: action.payload.fullName,
+            email: action.payload.email,
+            age: action.payload.age,
+            gender: action.payload.gender as 'Male' | 'Female' | 'Other',
+            profileImage: action.payload.profileImage,
+          };
+        }
+
+        // Also update in members array if present
+        const superUserIndex = state.members.findIndex(
+          m => m.userType === 'SuperUser',
+        );
         if (superUserIndex !== -1) {
           state.members[superUserIndex] = {
             ...state.members[superUserIndex],
@@ -295,11 +359,12 @@ const memberSlice = createSlice({
       .addCase(updateProfile.rejected, (state, action) => {
         console.error('❌ updateProfile: rejected');
         console.error('Error:', action.payload);
-        state.isUpdatingProfile = false;
+        state.isUpdatingProfile = false; // ✅ ADDED THIS
         state.profileUpdateError = action.payload as string;
       });
   },
 });
 
-export const { clearError, setSelectedMember, clearMembers } = memberSlice.actions;
+export const { clearError, setSelectedMember, clearMembers } =
+  memberSlice.actions;
 export default memberSlice.reducer;

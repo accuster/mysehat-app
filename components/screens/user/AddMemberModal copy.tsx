@@ -1,6 +1,6 @@
 // components/screens/user/AddMemberModal.tsx
 /* eslint-disable radix */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -15,24 +15,11 @@ import { X } from 'lucide-react-native';
 type Props = {
   visible: boolean;
   onClose: () => void;
-  onSave: (data: {
-    name: string;
-    age: number;
-    gender: 'Male' | 'Female' | 'Other';
-  }) => Promise<void>;
+  onSave: (data: { name: string; age: number; gender: 'Male' | 'Female' | 'Other' }) => Promise<void>;
   isLoading?: boolean;
 };
 
-export default function AddMemberModal({
-  visible,
-  onClose,
-  onSave,
-  isLoading,
-}: Props) {
-  // ✅ Add isMounted ref
-  const isMounted = useRef(true);
-
-  const NAME_REGEX = /^[a-zA-Z0-9. ]+$/;
+export default function AddMemberModal({ visible, onClose, onSave, isLoading }: Props) {
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
   const [gender, setGender] = useState<'Male' | 'Female' | 'Other'>('Male');
@@ -40,27 +27,6 @@ export default function AddMemberModal({
   // Validation errors
   const [nameError, setNameError] = useState('');
   const [ageError, setAgeError] = useState('');
-
-  // ✅ Setup and cleanup
-  useEffect(() => {
-    isMounted.current = true;
-
-    console.log('➕ AddMemberModal: Component mounted');
-
-    return () => {
-      console.log('🧹 AddMemberModal: Unmounting...');
-      isMounted.current = false;
-    };
-  }, []);
-
-  // ✅ Track visibility changes
-  useEffect(() => {
-    if (visible) {
-      console.log('👁️ AddMemberModal: Opened');
-    } else {
-      console.log('👁️ AddMemberModal: Closed');
-    }
-  }, [visible]);
 
   // Reset form
   const resetForm = () => {
@@ -81,11 +47,6 @@ export default function AddMemberModal({
     } else if (name.trim().length < 2) {
       setNameError('Name must be at least 2 characters');
       valid = false;
-    } else if (!NAME_REGEX.test(name.trim())) {
-      setNameError(
-        'Name can only contain letters, numbers, period, and spaces',
-      );
-      valid = false;
     } else {
       setNameError('');
     }
@@ -104,49 +65,26 @@ export default function AddMemberModal({
     return valid;
   };
 
-  // ✅ Handle save with isMounted protection
+  // Handle save
   const handleSave = async () => {
     if (!validateForm()) return;
 
-    // ✅ Check if mounted before starting
-    if (!isMounted.current) {
-      console.warn('⚠️ Modal unmounted, aborting save');
-      return;
-    }
-
     try {
-      console.log('💾 Saving member...');
-
       await onSave({
         name: name.trim(),
         age: parseInt(age),
         gender,
       });
-
-      // ✅ Check if still mounted after async operation
-      if (!isMounted.current) {
-        console.warn('⚠️ Modal unmounted after save');
-        return;
-      }
-
-      console.log('✅ Member saved successfully');
-
       resetForm();
       onClose();
-    } catch (err: any) {
-      console.error('❌ Save error:', err);
-      // Error is already shown by parent component
+    } catch (error: any) {
+      // Error already shown by parent
+      console.error('Save error:', error);
     }
   };
 
-  // ✅ Handle close with safety
+  // Handle close
   const handleClose = () => {
-    // ✅ Check if mounted before state updates
-    if (!isMounted.current) {
-      console.warn('⚠️ Modal unmounted, aborting close');
-      return;
-    }
-
     resetForm();
     onClose();
   };
@@ -176,17 +114,14 @@ export default function AddMemberModal({
               placeholder="Enter full name"
               placeholderTextColor="#64748B"
               value={name}
-              onChangeText={text => {
-                const filtered = text.replace(/[^a-zA-Z0-9. ]/g, '');
-                setName(filtered);
+              onChangeText={(text) => {
+                setName(text);
                 setNameError('');
               }}
               style={[styles.input, nameError && styles.inputError]}
               editable={!isLoading}
             />
-            {nameError ? (
-              <Text style={styles.errorText}>{nameError}</Text>
-            ) : null}
+            {nameError ? <Text style={styles.errorText}>{nameError}</Text> : null}
 
             {/* Age Input */}
             <Text style={styles.label}>Age *</Text>
@@ -194,7 +129,7 @@ export default function AddMemberModal({
               placeholder="Enter age"
               placeholderTextColor="#64748B"
               value={age}
-              onChangeText={text => {
+              onChangeText={(text) => {
                 setAge(text.replace(/[^0-9]/g, ''));
                 setAgeError('');
               }}
@@ -208,7 +143,7 @@ export default function AddMemberModal({
             {/* Gender Selector */}
             <Text style={styles.label}>Gender *</Text>
             <View style={styles.genderRow}>
-              {(['Male', 'Female', 'Other'] as const).map(g => (
+              {(['Male', 'Female', 'Other'] as const).map((g) => (
                 <Pressable
                   key={g}
                   onPress={() => setGender(g)}

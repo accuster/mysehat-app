@@ -1,7 +1,7 @@
 // components/screens/user/HomeScreen.tsx
 /* eslint-disable react-native/no-inline-styles */
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, BackHandler } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useSelector } from 'react-redux';
@@ -15,7 +15,7 @@ import {
   FileText,
   Users,
   Wallet,
-  MessagesSquare,
+  MessagesSquare ,
   ArrowLeftRight,
   ChevronRight,
 } from 'lucide-react-native';
@@ -26,10 +26,6 @@ type Props = {
 
 export default function HomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  
-  // ✅ Add isMounted ref
-  const isMounted = useRef(true);
-  
   const { members } = useSelector((state: RootState) => state.members);
   const { user } = useSelector((state: RootState) => state.auth);
 
@@ -38,61 +34,7 @@ export default function HomeScreen({ navigation }: Props) {
   const [browserUrl, setBrowserUrl] = useState('');
   const [browserTitle, setBrowserTitle] = useState('');
 
-  // ✅ FIXED: Setup and cleanup (no dependencies to prevent re-runs)
-  useEffect(() => {
-    isMounted.current = true;
-    
-    console.log('🏠 HomeScreen: Component mounted');
-
-    return () => {
-      console.log('🧹 HomeScreen: Unmounting...');
-      isMounted.current = false;
-      
-      // React will handle cleanup automatically
-      // No need to warn about open modals
-    };
-  }, []); // ✅ Empty array = only runs on mount/unmount
-
-  // ✅ Handle hardware back button
-  useEffect(() => {
-    const backAction = () => {
-      console.log('⬅️ HARDWARE BACK: HomeScreen');
-      
-      // ✅ Priority 1: Close browser if open
-      if (browserOpen) {
-        console.log('📱 Closing browser');
-        if (isMounted.current) {
-          setBrowserOpen(false);
-        }
-        return true; // Prevent default back
-      }
-      
-      // ✅ Priority 2: Close drawer if open
-      if (drawerOpen) {
-        console.log('🗂️ Closing drawer');
-        if (isMounted.current) {
-          setDrawerOpen(false);
-        }
-        return true; // Prevent default back
-      }
-      
-      // ✅ Priority 3: Allow default back (exit app or go to previous screen)
-      console.log('⬅️ Default back action');
-      return false; // Allow default
-    };
-
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      backAction
-    );
-
-    return () => backHandler.remove();
-  }, [drawerOpen, browserOpen]); // ✅ Keep dependencies here for BackHandler
-
   const handleOpenBrowser = (title: string, url: string) => {
-    // ✅ Check if mounted
-    if (!isMounted.current) return;
-    
     setBrowserTitle(title);
     setBrowserUrl(url);
     setBrowserOpen(true);
@@ -115,50 +57,22 @@ export default function HomeScreen({ navigation }: Props) {
     : 'User';
 
   // Mock wallet balance - TODO: Replace with real data from Redux/API
-  const walletBalance = 0;
-  const rewardBalance = 0;
+  const walletBalance = 1250;
+  const rewardBalance = 180;
 
   // ✅ Calculate dynamic bottom padding for ScrollView
   // Base padding (16) + FloatingBottomNav height (56) + gap (16) + safe area
   const scrollBottomPadding = 16 + 56 + 16 + (insets.bottom > 0 ? insets.bottom : 0);
 
-  // ✅ Safe navigation helper
-  const handleNavigation = (screen: string) => {
-    if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting navigation');
-      return;
-    }
-    
-    try {
-      navigation.navigate(screen);
-    } catch (error) {
-      console.error('❌ Navigation error:', error);
-    }
-  };
-
-  // ✅ Safe drawer toggle
-  const handleDrawerToggle = (open: boolean) => {
-    if (isMounted.current) {
-      setDrawerOpen(open);
-    }
-  };
-
-  // ✅ Safe browser toggle
-  const handleBrowserToggle = (open: boolean) => {
-    if (isMounted.current) {
-      setBrowserOpen(open);
-    }
-  };
-
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* HEADER */}
-      <AppHeader onMenuClick={() => handleDrawerToggle(true)} />
+      <AppHeader onMenuClick={() => setDrawerOpen(true)} />
 
       {/* DRAWER */}
       <AppDrawer
         open={drawerOpen}
-        onClose={() => handleDrawerToggle(false)}
+        onClose={() => setDrawerOpen(false)}
         navigation={navigation}
         onOpenBrowser={handleOpenBrowser}
       />
@@ -168,7 +82,7 @@ export default function HomeScreen({ navigation }: Props) {
         visible={browserOpen}
         url={browserUrl}
         title={browserTitle}
-        onClose={() => handleBrowserToggle(false)}
+        onClose={() => setBrowserOpen(false)}
       />
 
       {/* CONTENT */}
@@ -184,7 +98,7 @@ export default function HomeScreen({ navigation }: Props) {
         {/* ✅ Wallet Balance Card with Rewards */}
         <Pressable
           style={styles.walletBalanceCard}
-          onPress={() => handleNavigation('Wallet')}
+          onPress={() => navigation.navigate('Wallet')}
         >
           <View style={styles.walletHeader}>
             <View style={styles.walletIconContainer}>
@@ -213,7 +127,7 @@ export default function HomeScreen({ navigation }: Props) {
 
             <Pressable
               style={styles.addBalanceBtn}
-              onPress={() => handleNavigation('Wallet')}
+              onPress={() => navigation.navigate('Wallet')}
             >
               <Text style={styles.addBalanceText}>+ Add Balance</Text>
             </Pressable>
@@ -226,7 +140,7 @@ export default function HomeScreen({ navigation }: Props) {
           {/* Members Card */}
           <Pressable
             style={styles.actionCard}
-            onPress={() => handleNavigation('ManageMembers')}
+            onPress={() => navigation.navigate('ManageMembers')}
           >
             <View style={styles.actionIconContainer}>
               <Users size={28} color="#8B5CF6" />
@@ -238,7 +152,7 @@ export default function HomeScreen({ navigation }: Props) {
           {/* Transactions Card */}
           <Pressable
             style={styles.actionCard}
-            onPress={() => handleNavigation('Transactions')}
+            onPress={() => navigation.navigate('Transactions')}
           >
             <View style={styles.actionIconContainer}>
               <ArrowLeftRight size={28} color="#10B981" />
@@ -250,7 +164,7 @@ export default function HomeScreen({ navigation }: Props) {
           {/* Reports Card */}
           <Pressable
             style={styles.actionCard}
-            onPress={() => handleNavigation('Reports')}
+            onPress={() => navigation.navigate('Reports')}
           >
             <View style={styles.actionIconContainer}>
               <FileText size={28} color="#F59E0B" />
@@ -262,10 +176,10 @@ export default function HomeScreen({ navigation }: Props) {
           {/* Support Card */}
           <Pressable
             style={styles.actionCard}
-            onPress={() => handleNavigation('Support')}
+            onPress={() => navigation.navigate('Support')}
           >
             <View style={styles.actionIconContainer}>
-              <MessagesSquare size={28} color="#EC4899" />
+              <MessagesSquare  size={28} color="#EC4899" />
             </View>
             <Text style={styles.actionTitle}>Support</Text>
             <Text style={styles.actionSubtitle}>Get help</Text>
@@ -397,7 +311,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#3D2B5F',
-    marginBottom: -14,
+    marginBottom:-14
   },
   addBalanceText: {
     fontSize: 14,

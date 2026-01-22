@@ -16,10 +16,7 @@ import {
   PermissionsAndroid,
   BackHandler,
 } from 'react-native';
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../../store';
 import {
@@ -35,16 +32,8 @@ import {
   X,
 } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import {
-  launchImageLibrary,
-  launchCamera,
-  ImagePickerResponse,
-} from 'react-native-image-picker';
-import {
-  fetchMyProfile,
-  updateProfile,
-  clearError,
-} from '../../../store/slices/memberSlice';
+import { launchImageLibrary, launchCamera, ImagePickerResponse } from 'react-native-image-picker';
+import { updateProfile, clearError, fetchMembers } from '../../../store/slices/memberSlice';
 
 type Props = {
   navigation: any;
@@ -55,20 +44,19 @@ type GenderType = 'Male' | 'Female' | 'Other';
 export default function ProfileScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const dispatch = useDispatch<AppDispatch>();
-
-  // ✅ Add isMounted ref for safe async operations
+  
+  // ✅ Add isMounted ref
   const isMounted = useRef(true);
-
+  
   const { user } = useSelector((state: RootState) => state.auth);
-  const {
-    myProfile, // ✅ Use myProfile instead of filtering members
-    isLoadingProfile, // ✅ Use profile-specific loading state
-    profileError, // ✅ Use profile-specific error
-    isUpdatingProfile,
-    profileUpdateError,
-  } = useSelector((state: RootState) => state.members);
+  const { members, isLoading, isUpdatingProfile, profileUpdateError } = useSelector(
+    (state: RootState) => state.members
+  );
 
-  const NAME_REGEX = /^[a-zA-Z0-9. ]+$/;
+  const superUser = members.find(
+    member => member.userType === 'SuperUser' && member.id === user?.userId
+  );
+
   // Form state
   const [avatar, setAvatar] = useState<string | null>(null);
   const [fullName, setFullName] = useState('');
@@ -76,14 +64,14 @@ export default function ProfileScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState<Date | null>(null);
   const [gender, setGender] = useState<GenderType>('Male');
-
+  
   // Edit mode state
   const [isEditMode, setIsEditMode] = useState(false);
-
+  
   // UI state
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-
+  
   // Validation errors
   const [errors, setErrors] = useState({
     fullName: '',
@@ -95,9 +83,9 @@ export default function ProfileScreen({ navigation }: Props) {
   // ✅ Setup and cleanup
   useEffect(() => {
     isMounted.current = true;
-
+    
     console.log('📱 ProfileScreen: Component mounted');
-    dispatch(fetchMyProfile()); // ✅ Fetch only my profile
+    dispatch(fetchMembers());
 
     return () => {
       console.log('🧹 ProfileScreen: Unmounting...');
@@ -109,7 +97,7 @@ export default function ProfileScreen({ navigation }: Props) {
   useEffect(() => {
     const backAction = () => {
       console.log('⬅️ HARDWARE BACK: ProfileScreen');
-
+      
       // Check if in edit mode
       if (isEditMode) {
         // Prompt user before discarding changes
@@ -127,80 +115,72 @@ export default function ProfileScreen({ navigation }: Props) {
                 }
               },
             },
-          ],
+          ]
         );
         return true; // Prevent default back
       }
-
+      
       // Not in edit mode, allow normal back
       if (isMounted.current && navigation.canGoBack()) {
         navigation.goBack();
         return true;
       }
-
+      
       return false;
     };
 
     const backHandler = BackHandler.addEventListener(
       'hardwareBackPress',
-      backAction,
+      backAction
     );
 
     return () => backHandler.remove();
   }, [navigation, isEditMode]);
 
-  // ✅ Update form when myProfile data loads
+  // Update form when superUser data loads
   useEffect(() => {
-    if (myProfile) {
-      console.log('📝 Loading profile data into form:', myProfile.name);
-
-      setFullName(myProfile.name);
-      setEmail(myProfile.email || '');
-
-      if (myProfile.profileImage) {
+    if (superUser) {
+      setFullName(superUser.name);
+      setEmail(superUser.email || '');
+      
+      if (superUser.profileImage) {
         if (
-          myProfile.profileImage.startsWith('http://') ||
-          myProfile.profileImage.startsWith('https://')
+          superUser.profileImage.startsWith('http://') ||
+          superUser.profileImage.startsWith('https://')
         ) {
-          setAvatar(myProfile.profileImage);
+          setAvatar(superUser.profileImage);
         } else {
-          const fullImageUrl = `https://app.mysehat.ai${myProfile.profileImage}`;
+          const fullImageUrl = `https://app.mysehat.ai${superUser.profileImage}`;
           setAvatar(fullImageUrl);
         }
       } else {
         setAvatar(null);
       }
-
-      setGender(myProfile.gender as GenderType);
-
-      if (myProfile.age) {
-        const calculatedDOB = calculateDateFromAge(myProfile.age);
+      
+      setGender(superUser.gender as GenderType);
+      
+      if (superUser.age) {
+        const calculatedDOB = calculateDateFromAge(superUser.age);
         setDateOfBirth(calculatedDOB);
       }
     }
-
+    
     if (user?.mobile) {
       const displayMobile = user.mobile.startsWith('91')
         ? user.mobile.slice(2)
         : user.mobile;
       setMobile(displayMobile);
     }
-  }, [myProfile, user]);
+  }, [superUser, user, members]);
 
-  // ✅ Handle errors
+  // Handle errors
   useEffect(() => {
     if (profileUpdateError) {
       Alert.alert('Update Failed', profileUpdateError, [
         { text: 'OK', onPress: () => dispatch(clearError()) },
       ]);
     }
-
-    if (profileError) {
-      Alert.alert('Error Loading Profile', profileError, [
-        { text: 'OK', onPress: () => dispatch(clearError()) },
-      ]);
-    }
-  }, [profileUpdateError, profileError, dispatch]);
+  }, [profileUpdateError, dispatch]);
 
   function calculateDateFromAge(age: number): Date {
     const today = new Date();
@@ -232,7 +212,7 @@ export default function ProfileScreen({ navigation }: Props) {
   const handleEditToggle = () => {
     // ✅ Check if mounted
     if (!isMounted.current) return;
-
+    
     if (isEditMode) {
       // Canceling edit mode
       Alert.alert(
@@ -246,34 +226,29 @@ export default function ProfileScreen({ navigation }: Props) {
             onPress: () => {
               // ✅ Check before state updates
               if (!isMounted.current) return;
-
-              // ✅ Reload original data from myProfile
-              if (myProfile) {
-                setFullName(myProfile.name);
-                setEmail(myProfile.email || '');
-                setGender(myProfile.gender as GenderType);
-                if (myProfile.age) {
-                  setDateOfBirth(calculateDateFromAge(myProfile.age));
+              
+              // Reload original data
+              if (superUser) {
+                setFullName(superUser.name);
+                setEmail(superUser.email || '');
+                setGender(superUser.gender as GenderType);
+                if (superUser.age) {
+                  setDateOfBirth(calculateDateFromAge(superUser.age));
                 }
-                if (myProfile.profileImage) {
-                  const fullImageUrl = myProfile.profileImage.startsWith('http')
-                    ? myProfile.profileImage
-                    : `https://app.mysehat.ai${myProfile.profileImage}`;
+                if (superUser.profileImage) {
+                  const fullImageUrl = superUser.profileImage.startsWith('http')
+                    ? superUser.profileImage
+                    : `https://app.mysehat.ai${superUser.profileImage}`;
                   setAvatar(fullImageUrl);
                 } else {
                   setAvatar(null);
                 }
               }
               setIsEditMode(false);
-              setErrors({
-                fullName: '',
-                mobile: '',
-                email: '',
-                dateOfBirth: '',
-              });
+              setErrors({ fullName: '', mobile: '', email: '', dateOfBirth: '' });
             },
           },
-        ],
+        ]
       );
     } else {
       // Entering edit mode
@@ -293,12 +268,11 @@ export default function ProfileScreen({ navigation }: Props) {
         PermissionsAndroid.PERMISSIONS.CAMERA,
         {
           title: 'Camera Permission',
-          message:
-            'MySehat needs access to your camera to take profile pictures.',
+          message: 'MySehat needs access to your camera to take profile pictures.',
           buttonNeutral: 'Ask Me Later',
           buttonNegative: 'Cancel',
           buttonPositive: 'OK',
-        },
+        }
       );
 
       if (granted === PermissionsAndroid.RESULTS.GRANTED) {
@@ -306,26 +280,23 @@ export default function ProfileScreen({ navigation }: Props) {
         return true;
       } else {
         console.log('❌ Camera permission denied');
-
+        
         // ✅ Check before showing alert
         if (isMounted.current) {
           Alert.alert(
             'Permission Denied',
             'Camera permission is required to take photos. You can enable it later in your device settings.',
-            [{ text: 'OK' }],
+            [{ text: 'OK' }]
           );
         }
         return false;
       }
     } catch (err) {
       console.error('❌ Error requesting camera permission:', err);
-
+      
       // ✅ Check before showing alert
       if (isMounted.current) {
-        Alert.alert(
-          'Error',
-          'Failed to request camera permission. Please try again.',
-        );
+        Alert.alert('Error', 'Failed to request camera permission. Please try again.');
       }
       return false;
     }
@@ -334,7 +305,7 @@ export default function ProfileScreen({ navigation }: Props) {
   const handleImageResponse = (response: ImagePickerResponse) => {
     // ✅ Check if mounted
     if (!isMounted.current) return;
-
+    
     if (response.didCancel) {
       console.log('User cancelled image picker');
       return;
@@ -344,7 +315,7 @@ export default function ProfileScreen({ navigation }: Props) {
       console.error('ImagePicker Error:', response.errorMessage);
       Alert.alert(
         'Error',
-        response.errorMessage || 'Failed to select image. Please try again.',
+        response.errorMessage || 'Failed to select image. Please try again.'
       );
       return;
     }
@@ -368,7 +339,7 @@ export default function ProfileScreen({ navigation }: Props) {
         maxHeight: 1024,
         selectionLimit: 1,
       },
-      handleImageResponse,
+      handleImageResponse
     );
   };
 
@@ -393,7 +364,7 @@ export default function ProfileScreen({ navigation }: Props) {
         cameraType: 'front',
         saveToPhotos: false,
       },
-      handleImageResponse,
+      handleImageResponse
     );
   };
 
@@ -401,7 +372,7 @@ export default function ProfileScreen({ navigation }: Props) {
     if (!isEditMode) {
       Alert.alert(
         'Edit Mode Required',
-        'Please enable edit mode to change your profile picture.',
+        'Please enable edit mode to change your profile picture.'
       );
       return;
     }
@@ -429,37 +400,29 @@ export default function ProfileScreen({ navigation }: Props) {
   const handleDateChange = (event: any, selectedDate?: Date) => {
     // ✅ Check if mounted
     if (!isMounted.current) return;
-
+    
     setShowDatePicker(Platform.OS === 'ios');
     if (selectedDate) {
       setDateOfBirth(selectedDate);
       setErrors({ ...errors, dateOfBirth: '' });
     }
   };
-  // Validate form
+
   const validateForm = (): boolean => {
     const newErrors = { fullName: '', mobile: '', email: '', dateOfBirth: '' };
     let isValid = true;
-    // Full Name
+
     if (!fullName.trim()) {
       newErrors.fullName = 'Full name is required';
       isValid = false;
     } else if (fullName.trim().length < 2) {
       newErrors.fullName = 'Name must be at least 2 characters';
       isValid = false;
-    } else if (!NAME_REGEX.test(fullName.trim())) {
-      newErrors.fullName =
-        'Name can only contain letters, numbers, period, and spaces';
-      isValid = false;
-    } else {
-      newErrors.fullName = '';
     }
-    // Mobile is read-only, no need to validate
+
     if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       newErrors.email = 'Invalid email format';
       isValid = false;
-    } else {
-      newErrors.email = '';
     }
 
     if (!dateOfBirth) {
@@ -470,8 +433,6 @@ export default function ProfileScreen({ navigation }: Props) {
       if (age < 1 || age > 120) {
         newErrors.dateOfBirth = 'Age must be between 1 and 120';
         isValid = false;
-      } else {
-        newErrors.dateOfBirth = '';
       }
     }
 
@@ -485,43 +446,14 @@ export default function ProfileScreen({ navigation }: Props) {
       console.warn('⚠️ Component unmounted, aborting save');
       return;
     }
-
+    
     if (!validateForm()) {
+      Alert.alert('Validation Error', 'Please fix the errors before saving.');
       return;
     }
 
     try {
       const calculatedAge = dateOfBirth ? calculateAge(dateOfBirth) : undefined;
-
-      let imageToSend: string | null = null;
-
-      if (avatar) {
-        // Check if avatar is a local file (starts with file://) or an existing URL
-        if (avatar.startsWith('file://')) {
-          // ✅ New image selected from gallery/camera
-          imageToSend = avatar;
-          console.log('📸 Sending new image file');
-        } else if (
-          avatar.startsWith('http://') ||
-          avatar.startsWith('https://')
-        ) {
-          // ✅ Existing image URL - DON'T send it
-          console.log('ℹ️ Image unchanged, not sending to backend');
-          imageToSend = null;
-        } else {
-          // ✅ Fallback: treat as local file
-          imageToSend = avatar;
-        }
-      }
-
-      console.log('💾 Saving profile...');
-      console.log('Data:', {
-        fullName: fullName.trim(),
-        email: email.trim() || null,
-        age: calculatedAge,
-        gender: gender,
-        profileImage: imageToSend ? 'FILE' : null,
-      });
 
       const resultAction = await dispatch(
         updateProfile({
@@ -529,15 +461,13 @@ export default function ProfileScreen({ navigation }: Props) {
           email: email.trim() || null,
           age: calculatedAge,
           gender: gender,
-          profileImage: imageToSend, // ✅ Only send if new image selected
-        }),
+          profileImage: avatar || null,
+        })
       );
 
       // ✅ Check if still mounted after async operation
       if (!isMounted.current) {
-        console.warn(
-          '⚠️ Component unmounted after update, skipping UI updates',
-        );
+        console.warn('⚠️ Component unmounted after update, skipping UI updates');
         return;
       }
 
@@ -548,7 +478,7 @@ export default function ProfileScreen({ navigation }: Props) {
       }
     } catch (error: any) {
       console.error('❌ Profile update error:', error);
-
+      
       // ✅ Only show alert if mounted
       if (isMounted.current) {
         Alert.alert('Error', error.message || 'An unexpected error occurred');
@@ -559,9 +489,9 @@ export default function ProfileScreen({ navigation }: Props) {
   const handleSuccessClose = () => {
     // ✅ Check if mounted
     if (!isMounted.current) return;
-
+    
     setShowSuccessModal(false);
-
+    
     // ✅ Safe navigation with try-catch
     try {
       if (navigation.canGoBack()) {
@@ -574,8 +504,7 @@ export default function ProfileScreen({ navigation }: Props) {
 
   const scrollBottomPadding = 20 + (insets.bottom > 0 ? insets.bottom : 0);
 
-  // ✅ Loading state - use isLoadingProfile instead of isLoading
-  if (isLoadingProfile && !myProfile) {
+  if (isLoading && members.length === 0) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
@@ -615,11 +544,17 @@ export default function ProfileScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
 
+      {/* Edit Mode Banner */}
+      {isEditMode && (
+        <View style={styles.editModeBanner}>
+          <Text style={styles.editModeText}>
+            ✏️ Edit Mode - Make your changes and save
+          </Text>
+        </View>
+      )}
+
       <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: scrollBottomPadding },
-        ]}
+        contentContainerStyle={[styles.content, { paddingBottom: scrollBottomPadding }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Avatar Section */}
@@ -664,10 +599,9 @@ export default function ProfileScreen({ navigation }: Props) {
               placeholder="Enter your full name"
               placeholderTextColor="#71717A"
               value={fullName}
-              onChangeText={text => {
+              onChangeText={(text) => {
                 if (isMounted.current) {
-                  const filtered = text.replace(/[^a-zA-Z0-9. ]/g, '');
-                  setFullName(filtered);
+                  setFullName(text);
                   setErrors({ ...errors, fullName: '' });
                 }
               }}
@@ -711,7 +645,7 @@ export default function ProfileScreen({ navigation }: Props) {
               placeholder="Enter your email"
               placeholderTextColor="#71717A"
               value={email}
-              onChangeText={text => {
+              onChangeText={(text) => {
                 if (isMounted.current) {
                   setEmail(text);
                   setErrors({ ...errors, email: '' });
@@ -721,9 +655,7 @@ export default function ProfileScreen({ navigation }: Props) {
               autoCapitalize="none"
               editable={isEditMode && !isUpdatingProfile}
             />
-            {errors.email ? (
-              <Text style={styles.errorText}>{errors.email}</Text>
-            ) : null}
+            {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
           </View>
 
           {/* Date of Birth */}
@@ -748,14 +680,13 @@ export default function ProfileScreen({ navigation }: Props) {
               <Text
                 style={[
                   styles.dateButtonText,
-                  (!isEditMode || isUpdatingProfile) &&
-                    styles.dateButtonTextDisabled,
+                  (!isEditMode || isUpdatingProfile) && styles.dateButtonTextDisabled,
                 ]}
               >
                 {dateOfBirth
-                  ? `${dateOfBirth.toLocaleDateString(
-                      'en-GB',
-                    )} (Age: ${calculateAge(dateOfBirth)})`
+                  ? `${dateOfBirth.toLocaleDateString('en-GB')} (Age: ${calculateAge(
+                      dateOfBirth
+                    )})`
                   : 'Select date of birth'}
               </Text>
               <Calendar size={20} color="#A1A1AA" strokeWidth={2.5} />
@@ -769,14 +700,13 @@ export default function ProfileScreen({ navigation }: Props) {
           <View style={styles.fieldContainer}>
             <Text style={styles.label}>Gender *</Text>
             <View style={styles.genderRow}>
-              {(['Male', 'Female', 'Other'] as GenderType[]).map(g => (
+              {(['Male', 'Female', 'Other'] as GenderType[]).map((g) => (
                 <TouchableOpacity
                   key={g}
                   style={[
                     styles.genderButton,
                     gender === g && styles.genderButtonActive,
-                    (!isEditMode || isUpdatingProfile) &&
-                      styles.genderButtonDisabled,
+                    (!isEditMode || isUpdatingProfile) && styles.genderButtonDisabled,
                   ]}
                   onPress={() => {
                     if (isMounted.current && isEditMode && !isUpdatingProfile) {
@@ -801,10 +731,7 @@ export default function ProfileScreen({ navigation }: Props) {
           {/* Save Button - Only shown in edit mode */}
           {isEditMode && (
             <TouchableOpacity
-              style={[
-                styles.saveButton,
-                isUpdatingProfile && styles.saveButtonDisabled,
-              ]}
+              style={[styles.saveButton, isUpdatingProfile && styles.saveButtonDisabled]}
               onPress={handleSave}
               disabled={isUpdatingProfile}
             >
@@ -854,12 +781,9 @@ export default function ProfileScreen({ navigation }: Props) {
             </View>
             <Text style={styles.successTitle}>Profile Updated</Text>
             <Text style={styles.successMessage}>
-              Your profile has been updated successfully!
+              Your profile updated successfully!
             </Text>
-            <TouchableOpacity
-              style={styles.successButton}
-              onPress={handleSuccessClose}
-            >
+            <TouchableOpacity style={styles.successButton} onPress={handleSuccessClose}>
               <Text style={styles.successButtonText}>Okay, Thanks</Text>
             </TouchableOpacity>
           </View>

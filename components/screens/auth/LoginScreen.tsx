@@ -1,8 +1,6 @@
 // components/screens/auth/LoginScreen.tsx
-/* eslint-disable no-catch-shadow */
-/* eslint-disable @typescript-eslint/no-shadow */
 /* eslint-disable react-native/no-inline-styles */
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,6 +14,7 @@ import {
   Modal,
   Image,
   Alert,
+  BackHandler,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { OTPWidget } from '@msg91comm/sendotp-react-native';
@@ -25,7 +24,6 @@ import { isValidIndianMobile } from '../../../utils/validators';
 import { verifyLogin, setOtpSent, clearError } from '../../../store/slices/authSlice';
 import { RootState, AppDispatch } from '../../../store';
 
-// Import version from package.json
 const packageJson = require('../../../package.json');
 
 // MSG91 Configuration
@@ -35,15 +33,17 @@ const MSG91_TOKEN_AUTH = '442931TIzX7UoX8cUH68ee3e82P1';
 // ============================================================================
 // 🧪 TEST MODE CONFIGURATION
 // ============================================================================
-const TEST_MOBILE = '9876543210'; // Test mobile without country code
-const TEST_OTP = '654321'; // Test OTP
-const TEST_MODE_ENABLED = true; // Set to false to disable test mode
+const TEST_MOBILE = '9876543210';
+const TEST_OTP = '654321';
+const TEST_MODE_ENABLED = true;
 
 type Props = {
   navigation: any;
 };
 
 export default function LoginScreen({ navigation }: Props) {
+  const isMounted = useRef(true);
+  
   const dispatch = useDispatch<AppDispatch>();
   const { isLoading, error, otpSent } = useSelector((state: RootState) => state.auth);
 
@@ -53,7 +53,7 @@ export default function LoginScreen({ navigation }: Props) {
   const [otpError, setOtpError] = useState('');
   const [resendTimer, setResendTimer] = useState(0);
   const [reqId, setReqId] = useState<string | null>(null);
-  const [isTestMode, setIsTestMode] = useState(false); // Track if we're in test mode
+  const [isTestMode, setIsTestMode] = useState(false);
   const [browser, setBrowser] = React.useState<{
     visible: boolean;
     url: string;
@@ -66,19 +66,78 @@ export default function LoginScreen({ navigation }: Props) {
 
   const canSendOtp = useMemo(() => isValidIndianMobile(phone), [phone]);
 
-  // Initialize MSG91 Widget on mount
+  // ✅ Use useCallback to memoize handleChangeNumber
+  const handleChangeNumber = useCallback(() => {
+    dispatch(setOtpSent(false));
+    setOtp('');
+    setOtpError('');
+    setPhoneError('');
+    setResendTimer(0);
+    setReqId(null);
+    setIsTestMode(false);
+  }, [dispatch]);
+
+  // ✅ Setup and cleanup
   useEffect(() => {
+    isMounted.current = true;
+    
+    console.log('🔐 LoginScreen: Component mounted');
     console.log('🔐 Initializing MSG91 Widget...');
+    
     try {
       OTPWidget.initializeWidget(MSG91_WIDGET_ID, MSG91_TOKEN_AUTH);
       console.log('✅ MSG91 Widget initialized successfully');
-    } catch (error) {
-      console.error('❌ Failed to initialize MSG91 Widget:', error);
+    } catch (err) {
+      console.error('❌ Failed to initialize MSG91 Widget:', err);
       Alert.alert('Error', 'Failed to initialize OTP service. Please restart the app.');
     }
+
+    return () => {
+      console.log('🧹 LoginScreen: Unmounting...');
+      isMounted.current = false;
+    };
   }, []);
 
-  // Countdown timer for resend OTP
+  // ✅ Handle hardware back button - now with proper dependencies
+  useEffect(() => {
+    const backAction = () => {
+      console.log('⬅️ HARDWARE BACK: LoginScreen');
+      
+      if (otpSent && !isLoading) {
+        Alert.alert(
+          'Cancel Login?',
+          'Your OTP session will be lost. Are you sure you want to go back?',
+          [
+            {
+              text: 'Stay',
+              style: 'cancel',
+            },
+            {
+              text: 'Cancel Login',
+              style: 'destructive',
+              onPress: () => {
+                if (isMounted.current) {
+                  handleChangeNumber();
+                }
+              },
+            },
+          ]
+        );
+        return true;
+      }
+      
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction
+    );
+
+    return () => backHandler.remove();
+  }, [otpSent, isLoading, handleChangeNumber]); // ✅ Added handleChangeNumber
+
+  // Countdown timer
   useEffect(() => {
     if (resendTimer > 0) {
       const timer = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
@@ -94,9 +153,7 @@ export default function LoginScreen({ navigation }: Props) {
     }
   }, [error, dispatch]);
 
-  // ============================================================================
-  // 🧪 CHECK IF TEST MOBILE
-  // ============================================================================
+  // Check if test mobile
   useEffect(() => {
     if (TEST_MODE_ENABLED && phone === TEST_MOBILE) {
       console.log('🧪 TEST MODE DETECTED');
@@ -106,20 +163,13 @@ export default function LoginScreen({ navigation }: Props) {
     }
   }, [phone]);
 
-  /**
-   * ============================================================================
-   * 🧪 HANDLE TEST MODE OTP SEND
-   * ============================================================================
-   */
   const handleTestModeSendOtp = () => {
+    if (!isMounted.current) return;
+    
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('🧪 TEST MODE: Sending Test OTP');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('Test Mobile:', TEST_MOBILE);
-    console.log('Test OTP:', TEST_OTP);
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     
-    // Generate a test request ID
     const testReqId = 'TEST_' + Date.now();
     setReqId(testReqId);
     
@@ -133,13 +183,13 @@ export default function LoginScreen({ navigation }: Props) {
     );
   };
 
-  /**
-   * ============================================================================
-   * SEND OTP VIA MSG91 (PRODUCTION MODE)
-   * ============================================================================
-   */
   const handleSendOtp = async () => {
     console.log('📤 Sending OTP to:', phone);
+    
+    if (!isMounted.current) {
+      console.warn('⚠️ Component unmounted, aborting OTP send');
+      return;
+    }
     
     setPhoneError('');
     setOtpError('');
@@ -154,17 +204,11 @@ export default function LoginScreen({ navigation }: Props) {
       return;
     }
     
-    // ============================================================================
-    // 🧪 TEST MODE: Use test OTP flow
-    // ============================================================================
     if (isTestMode) {
       handleTestModeSendOtp();
       return;
     }
     
-    // ============================================================================
-    // PRODUCTION MODE: Normal MSG91 flow
-    // ============================================================================
     try {
       const data = {
         identifier: `91${phone}`,
@@ -172,6 +216,11 @@ export default function LoginScreen({ navigation }: Props) {
       
       console.log('📱 Calling MSG91 sendOTP...');
       const response = await OTPWidget.sendOTP(data);
+      
+      if (!isMounted.current) {
+        console.warn('⚠️ Component unmounted after OTP send');
+        return;
+      }
       
       console.log('✅ MSG91 Response:', response);
       
@@ -186,42 +235,44 @@ export default function LoginScreen({ navigation }: Props) {
       } else {
         throw new Error(response.message || 'Failed to send OTP');
       }
-    } catch (error: any) {
-      console.error('❌ Send OTP error:', error);
-      setPhoneError(error.message || 'Failed to send OTP. Please try again.');
+    } catch (err: any) {
+      console.error('❌ Send OTP error:', err);
+      
+      if (isMounted.current) {
+        setPhoneError(err.message || 'Failed to send OTP. Please try again.');
+      }
     }
   };
 
-  /**
-   * ============================================================================
-   * RESEND OTP
-   * ============================================================================
-   */
   const handleResendOtp = async () => {
     if (resendTimer > 0) return;
+    
+    if (!isMounted.current) {
+      console.warn('⚠️ Component unmounted, aborting resend');
+      return;
+    }
     
     console.log('🔄 Resending OTP...');
     setOtpError('');
     setOtp('');
     setReqId(null);
     
-    // ============================================================================
-    // 🧪 TEST MODE: Resend test OTP
-    // ============================================================================
     if (isTestMode) {
       handleTestModeSendOtp();
       return;
     }
     
-    // ============================================================================
-    // PRODUCTION MODE: Normal MSG91 resend
-    // ============================================================================
     try {
       const data = {
         identifier: `91${phone}`,
       };
       
       const response = await OTPWidget.sendOTP(data);
+      
+      if (!isMounted.current) {
+        console.warn('⚠️ Component unmounted after resend');
+        return;
+      }
       
       if (response.type === 'success') {
         const hexReqId = response.message;
@@ -232,26 +283,25 @@ export default function LoginScreen({ navigation }: Props) {
       } else {
         throw new Error(response.message || 'Failed to resend OTP');
       }
-    } catch (error: any) {
-      console.error('❌ Resend OTP error:', error);
-      setOtpError(error.message || 'Failed to resend OTP. Please try again.');
+    } catch (err: any) {
+      console.error('❌ Resend OTP error:', err);
+      
+      if (isMounted.current) {
+        setOtpError(err.message || 'Failed to resend OTP. Please try again.');
+      }
     }
   };
 
-  /**
-   * ============================================================================
-   * 🧪 VERIFY TEST OTP
-   * ============================================================================
-   */
   const handleVerifyTestOtp = async () => {
+    if (!isMounted.current) {
+      console.warn('⚠️ Component unmounted, aborting verify');
+      return;
+    }
+    
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('🧪 TEST MODE: Verifying Test OTP');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('Entered OTP:', otp);
-    console.log('Expected OTP:', TEST_OTP);
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     
-    // Verify test OTP
     if (otp !== TEST_OTP) {
       setOtpError(`Invalid OTP. Test OTP is: ${TEST_OTP}`);
       return;
@@ -259,15 +309,17 @@ export default function LoginScreen({ navigation }: Props) {
     
     console.log('✅ Test OTP verified! Logging in...');
     
-    // Generate test access token
     const testAccessToken = `test_token_${phone}_${Date.now()}`;
-    
-    console.log('🔑 Sending test token to backend...');
     
     const resultAction = await dispatch(verifyLogin({
       accessToken: testAccessToken,
       mobile: phone,
     }));
+    
+    if (!isMounted.current) {
+      console.warn('⚠️ Component unmounted after test login');
+      return;
+    }
     
     if (verifyLogin.fulfilled.match(resultAction)) {
       console.log('✅ Test login successful!');
@@ -286,13 +338,13 @@ export default function LoginScreen({ navigation }: Props) {
     }
   };
 
-  /**
-   * ============================================================================
-   * VERIFY OTP WITH MSG91 (PRODUCTION MODE)
-   * ============================================================================
-   */
   const handleVerifyOtp = async () => {
     console.log('🔐 Verifying OTP...');
+    
+    if (!isMounted.current) {
+      console.warn('⚠️ Component unmounted, aborting verify');
+      return;
+    }
     
     setOtpError('');
     
@@ -306,17 +358,11 @@ export default function LoginScreen({ navigation }: Props) {
       return;
     }
     
-    // ============================================================================
-    // 🧪 TEST MODE: Verify test OTP
-    // ============================================================================
     if (isTestMode) {
       await handleVerifyTestOtp();
       return;
     }
     
-    // ============================================================================
-    // PRODUCTION MODE: Normal MSG91 verification
-    // ============================================================================
     if (!reqId) {
       setOtpError('Session expired. Please resend OTP.');
       return;
@@ -329,9 +375,13 @@ export default function LoginScreen({ navigation }: Props) {
       };
       
       console.log('🔍 Verifying with HEX reqId:', reqId);
-      console.log('OTP:', otp);
       
       const verifyResponse = await OTPWidget.verifyOTP(verifyData);
+      
+      if (!isMounted.current) {
+        console.warn('⚠️ Component unmounted after OTP verify');
+        return;
+      }
       
       console.log('✅ Verify response:', verifyResponse);
       
@@ -357,6 +407,11 @@ export default function LoginScreen({ navigation }: Props) {
           mobile: phone,
         }));
         
+        if (!isMounted.current) {
+          console.warn('⚠️ Component unmounted after backend login');
+          return;
+        }
+        
         if (verifyLogin.fulfilled.match(resultAction)) {
           console.log('✅ Login successful!');
           
@@ -381,40 +436,29 @@ export default function LoginScreen({ navigation }: Props) {
           setOtpError(verifyResponse.message || 'Verification failed. Please try again.');
         }
       }
-    } catch (error: any) {
-      console.error('❌ Verify OTP error:', error);
+    } catch (err: any) {
+      console.error('❌ Verify OTP error:', err);
       
-      if (error.message && error.message.toLowerCase().includes('invalid')) {
-        setOtpError('Invalid OTP. Please check and try again.');
-      } else if (error.message && error.message.toLowerCase().includes('expired')) {
-        setOtpError('OTP expired. Please request a new one.');
-      } else {
-        setOtpError('Verification failed. Please try again.');
+      if (isMounted.current) {
+        if (err.message && err.message.toLowerCase().includes('invalid')) {
+          setOtpError('Invalid OTP. Please check and try again.');
+        } else if (err.message && err.message.toLowerCase().includes('expired')) {
+          setOtpError('OTP expired. Please request a new one.');
+        } else {
+          setOtpError('Verification failed. Please try again.');
+        }
       }
     }
   };
 
-  // Handle phone number change
   const handlePhoneChange = (text: string) => {
     setPhone(text);
     if (phoneError) setPhoneError('');
   };
 
-  // Handle OTP change
   const handleOtpChange = (text: string) => {
     setOtp(text);
     if (otpError) setOtpError('');
-  };
-
-  // Handle change number
-  const handleChangeNumber = () => {
-    dispatch(setOtpSent(false));
-    setOtp('');
-    setOtpError('');
-    setPhoneError('');
-    setResendTimer(0);
-    setReqId(null);
-    setIsTestMode(false);
   };
 
   return (
@@ -459,7 +503,6 @@ export default function LoginScreen({ navigation }: Props) {
           </View>
 
           <View style={styles.card}>
-            {/* PHONE INPUT */}
             <Text style={styles.label}>WhatsApp Number</Text>
             <View style={[
               styles.phoneRow,
@@ -483,7 +526,6 @@ export default function LoginScreen({ navigation }: Props) {
               <Text style={styles.errorText}>{phoneError}</Text>
             ) : null}
 
-            {/* 🧪 TEST MODE INDICATOR */}
             {isTestMode && !otpSent && (
               <View style={styles.testModeAlert}>
                 <Text style={styles.testModeAlertText}>
@@ -493,7 +535,6 @@ export default function LoginScreen({ navigation }: Props) {
               </View>
             )}
 
-            {/* OTP FLOW */}
             {!otpSent ? (
               <Pressable
                 onPress={handleSendOtp}
@@ -530,7 +571,6 @@ export default function LoginScreen({ navigation }: Props) {
                   <Text style={styles.errorText}>{otpError}</Text>
                 ) : null}
 
-                {/* 🧪 TEST OTP HINT */}
                 {isTestMode && (
                   <View style={styles.testOtpHint}>
                     <Text style={styles.testOtpHintText}>
@@ -582,7 +622,6 @@ export default function LoginScreen({ navigation }: Props) {
           </View>
         </View>
 
-        {/* FOOTER */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>
             By continuing, you agree to our{' '}
@@ -781,7 +820,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1F2937',
   },
-  // 🧪 TEST MODE STYLES
   testModeInput: {
     borderColor: '#10B981',
     borderWidth: 2,
