@@ -78,7 +78,7 @@ export default function SupportScreen({ navigation }: any) {
   // ✅ Safe navigation helper
   const handleBack = () => {
     if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting navigation');
+      console.log('⚠️ Component unmounted, aborting navigation');
       return;
     }
     
@@ -87,7 +87,7 @@ export default function SupportScreen({ navigation }: any) {
         navigation.goBack();
       }
     } catch (error) {
-      console.error('❌ Navigation error:', error);
+      console.log('❌ Navigation error:', error);
     }
   };
 
@@ -100,7 +100,7 @@ export default function SupportScreen({ navigation }: any) {
   }) => {
     // ✅ Check if mounted
     if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting ticket creation');
+      console.log('⚠️ Component unmounted, aborting ticket creation');
       return { ok: false as const, error: 'Operation cancelled' };
     }
     
@@ -112,7 +112,7 @@ export default function SupportScreen({ navigation }: any) {
 
       // ✅ Check if still mounted before updating state
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted after ticket creation');
+        console.log('⚠️ Component unmounted after ticket creation');
         return { ok: false as const, error: 'Operation cancelled' };
       }
 
@@ -133,7 +133,7 @@ export default function SupportScreen({ navigation }: any) {
       console.log('✅ Ticket created:', id);
       return { ok: true as const, ticketId: id };
     } catch (error) {
-      console.error('❌ Failed to create ticket:', error);
+      console.log('❌ Failed to create ticket:', error);
       return { ok: false as const, error: 'Failed to create ticket' };
     }
   };
@@ -141,7 +141,7 @@ export default function SupportScreen({ navigation }: any) {
   const fetchTimeline = async (ticketId: string) => {
     // ✅ Check if mounted
     if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting timeline fetch');
+      console.log('⚠️ Component unmounted, aborting timeline fetch');
       return { ok: false as const, error: 'Operation cancelled' };
     }
     
@@ -156,14 +156,14 @@ export default function SupportScreen({ navigation }: any) {
 
       // ✅ Check if still mounted before returning
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted after timeline fetch');
+        console.log('⚠️ Component unmounted after timeline fetch');
         return { ok: false as const, error: 'Operation cancelled' };
       }
 
       console.log('✅ Timeline fetched');
       return { ok: true as const, events };
     } catch (error) {
-      console.error('❌ Failed to fetch timeline:', error);
+      console.log('❌ Failed to fetch timeline:', error);
       return { ok: false as const, error: 'Failed to fetch timeline' };
     }
   };

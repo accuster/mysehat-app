@@ -102,7 +102,7 @@ class PaymentApiService {
       
       return response.data;
     } catch (error: any) {
-      console.error('❌ API Error (createPayment):', error.message);
+      console.log('❌ API Error (createPayment):', error.message);
       throw this.handleError(error);
     }
   }
@@ -129,7 +129,7 @@ class PaymentApiService {
       
       return response.data;
     } catch (error: any) {
-      console.error('❌ API Error (verifyPayment):', error.message);
+      console.log('❌ API Error (verifyPayment):', error.message);
       throw this.handleError(error);
     }
   }
@@ -144,7 +144,7 @@ class PaymentApiService {
                      'An error occurred';
       const status = error.response.status;
       
-      console.error('Server Error:', {
+      console.log('Server Error:', {
         status,
         message,
         data: error.response.data,
@@ -152,10 +152,10 @@ class PaymentApiService {
       
       return new Error(message);
     } else if (error.request) {
-      console.error('No response from server:', error.request);
+      console.log('No response from server:', error.request);
       return new Error('No response from server. Please check your connection.');
     } else {
-      console.error('Request Error:', error.message);
+      console.log('Request Error:', error.message);
       return new Error(error.message || 'An unexpected error occurred');
     }
   }

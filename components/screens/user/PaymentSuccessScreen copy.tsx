@@ -71,10 +71,10 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
           setIsFetchingReport(false);
         })
         .catch((err) => {
-          console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          console.error('❌ Failed to fetch report');
-          console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          console.error('Error:', err);
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.log('❌ Failed to fetch report');
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.log('Error:', err);
           setIsFetchingReport(false);
           Alert.alert(
             'Error',
@@ -83,10 +83,10 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
           );
         });
     } else {
-      console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.warn('⚠️ No reportId provided to PaymentSuccessScreen');
-      console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.warn('Full route.params:', route.params);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('⚠️ No reportId provided to PaymentSuccessScreen');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('Full route.params:', route.params);
     }
   }, [reportId, dispatch]);
 
@@ -97,7 +97,7 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
     console.log('selectedReport state:', selectedReport ? 'EXISTS' : 'NULL');
     
     if (!selectedReport) {
-      console.error('❌ selectedReport is null!');
+      console.log('❌ selectedReport is null!');
       Alert.alert(
         'Report Not Available',
         'Please wait while we fetch your report data, or try again from the Reports tab.',
@@ -142,7 +142,7 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
         data: reportData,
       });
     } catch (transformError) {
-      console.error('❌ Error transforming report data:', transformError);
+      console.log('❌ Error transforming report data:', transformError);
       Alert.alert('Error', 'Failed to prepare report data');
     }
   };

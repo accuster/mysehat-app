@@ -1,7 +1,7 @@
-// components/screens/user/PayScreen.tsx
+// components/screens/user/PayScreen.tsx - FIXED: Prevent unmounting on payment cancel
 /* eslint-disable react-native/no-inline-styles */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, BackHandler, AppState } from 'react-native';
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetScrollView,
@@ -13,6 +13,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import RazorpayCheckout from 'react-native-razorpay';
 import { paymentApi } from '../../../store/services/paymentApi';
 import type { CreatePaymentData } from '../../../store/services/paymentApi';
+import ErrorToast from '../../common/ErrorToast';
+import { useErrorToast } from '../../../hooks/useErrorToast';
 
 type Props = {
   route: any;
@@ -23,11 +25,13 @@ export default function PayScreen({ route, navigation }: Props) {
   const { selectedUserName, user, orderId, qrData } = route.params;
   const bottomSheetRef = useRef<BottomSheet>(null);
   
-  // ✅ Add isMounted ref
   const isMounted = useRef(true);
+  const isPaymentInProgress = useRef(false); // ✅ NEW: Track if payment is actually in progress
   
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
+  
+  const { toast, showError, showWarning, hideToast } = useErrorToast();
   
   const insets = useSafeAreaInsets();
 
@@ -61,10 +65,42 @@ export default function PayScreen({ route, navigation }: Props) {
       console.log('🧹 PayScreen: Unmounting...');
       isMounted.current = false;
       
-      // Cancel any pending operations
-      if (isProcessingPayment || isVerifyingPayment) {
-        console.warn('⚠️ Component unmounted during payment operation');
+      if (isPaymentInProgress.current) {
+        console.log('⚠️ Component unmounted while payment was in progress');
       }
+    };
+  }, [orderDetails.orderId, orderDetails.amount, user?.name, selectedUserName]);
+
+  // ✅ NEW: Prevent navigation when payment is in progress
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e: any) => {
+      // ✅ Only prevent if payment is actually in Razorpay modal (not just processing)
+      if (isPaymentInProgress.current) {
+        console.log('🚫 Preventing navigation - payment in Razorpay modal');
+        e.preventDefault();
+        
+        showWarning(
+          'Payment is in progress. Please complete or cancel the payment first.',
+        );
+      }
+    });
+
+    return unsubscribe;
+  }, [navigation, showWarning]);
+
+  // ✅ Handle AppState changes (when Razorpay opens/closes)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      console.log('📱 AppState changed:', nextAppState);
+      
+      if (nextAppState === 'active' && isPaymentInProgress.current) {
+        console.log('✅ App became active with payment in progress');
+        console.log('💡 User probably closed Razorpay - waiting for SDK callback');
+      }
+    });
+
+    return () => {
+      subscription.remove();
     };
   }, []);
 
@@ -73,17 +109,29 @@ export default function PayScreen({ route, navigation }: Props) {
     const backAction = () => {
       console.log('⬅️ HARDWARE BACK: PayScreen');
       
-      // ✅ Block back during payment
-      if (isProcessingPayment || isVerifyingPayment) {
-        Alert.alert(
-          'Payment in Progress',
-          'Please wait for the payment to complete. Do not press back or close the app.',
-          [{ text: 'OK' }]
+      // ✅ Block back if payment is in Razorpay modal
+      if (isPaymentInProgress.current) {
+        showWarning(
+          'Payment is in progress. Please complete or cancel the payment in the Razorpay window.',
         );
         return true; // Prevent default back
       }
       
-      // ✅ Safe navigation when not processing
+      // ✅ Block back during verification
+      if (isVerifyingPayment) {
+        showWarning(
+          'Verifying payment. Please wait...',
+        );
+        return true;
+      }
+      
+      // ✅ Allow back if just processing (before Razorpay opens)
+      if (isProcessingPayment && !isPaymentInProgress.current) {
+        console.log('⚠️ Back pressed while creating payment order');
+        return false; // Allow back
+      }
+      
+      // ✅ Safe navigation when idle
       if (isMounted.current && navigation.canGoBack()) {
         navigation.goBack();
         return true;
@@ -98,7 +146,7 @@ export default function PayScreen({ route, navigation }: Props) {
     );
 
     return () => backHandler.remove();
-  }, [navigation, isProcessingPayment, isVerifyingPayment]);
+  }, [navigation, isProcessingPayment, isVerifyingPayment, showWarning]);
 
   const snapPoints = useMemo(() => ['80%'], []);
 
@@ -110,16 +158,26 @@ export default function PayScreen({ route, navigation }: Props) {
         disappearsOnIndex={-1}
         opacity={0.6}
         onPress={() => {
-          // ✅ Block backdrop press during payment
-          if (!isProcessingPayment && !isVerifyingPayment) {
-            if (isMounted.current && navigation.canGoBack()) {
-              navigation.goBack();
-            }
+          // ✅ Block backdrop press if payment in Razorpay
+          if (isPaymentInProgress.current) {
+            showWarning('Payment is in progress. Please complete or cancel in the Razorpay window.');
+            return;
+          }
+          
+          // ✅ Block if verifying
+          if (isVerifyingPayment) {
+            showWarning('Verifying payment. Please wait...');
+            return;
+          }
+          
+          // ✅ Allow close if idle
+          if (!isProcessingPayment && isMounted.current && navigation.canGoBack()) {
+            navigation.goBack();
           }
         }}
       />
     ),
-    [navigation, isProcessingPayment, isVerifyingPayment],
+    [navigation, isProcessingPayment, isVerifyingPayment, showWarning],
   );
 
   useEffect(() => {
@@ -129,11 +187,10 @@ export default function PayScreen({ route, navigation }: Props) {
   /**
    * Verify payment with backend
    */
-  const verifyPaymentWithBackend = async (razorpayResponse: any) => {
+  const verifyPaymentWithBackend = useCallback(async (razorpayResponse: any) => {
     try {
-      // ✅ Check if mounted before starting
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted, aborting verification');
+        console.log('⚠️ Component unmounted, aborting verification');
         return;
       }
       
@@ -151,9 +208,8 @@ export default function PayScreen({ route, navigation }: Props) {
         razorpay_signature: razorpayResponse.razorpay_signature,
       });
       
-      // ✅ Check if still mounted after async operation
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted after verification, skipping navigation');
+        console.log('⚠️ Component unmounted after verification');
         return;
       }
       
@@ -165,7 +221,7 @@ export default function PayScreen({ route, navigation }: Props) {
       console.log('Report ID:', verifyResponse.data.report_id);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       
-      // ✅ Safe navigation with try-catch
+      // ✅ Navigate to success screen
       try {
         navigation.navigate('PaymentSuccess', {
           amountLabel: `₹${orderDetails.amount}`,
@@ -177,56 +233,42 @@ export default function PayScreen({ route, navigation }: Props) {
           paymentId: razorpayResponse.razorpay_payment_id,
         });
       } catch (navError) {
-        console.error('❌ Navigation error:', navError);
-        Alert.alert('Success', 'Payment completed successfully! Please check your reports.');
+        console.log('❌ Navigation error:', navError);
+        showError('Payment completed successfully! Please check your reports.');
       }
       
     } catch (error: any) {
-      console.error('❌ Payment verification failed:', error.message);
+      console.log('❌ Payment verification failed:', error.message);
       
-      // ✅ Only show alert if mounted
       if (isMounted.current) {
-        Alert.alert(
-          'Verification Failed',
+        showError(
           'Payment completed but verification failed. Please contact support with your payment ID.',
-          [
-            {
-              text: 'Contact Support',
-              onPress: () => {
-                try {
-                  navigation.navigate('Support');
-                } catch (err) {
-                  console.error('Navigation error:', err);
-                }
-              }
-            },
-            {
-              text: 'OK',
-              onPress: () => {
-                if (navigation.canGoBack()) {
-                  navigation.goBack();
-                }
+          {
+            label: 'Contact Support',
+            onPress: () => {
+              try {
+                navigation.navigate('Support');
+              } catch (err) {
+                console.log('Navigation error:', err);
               }
             }
-          ]
+          }
         );
       }
     } finally {
-      // ✅ Only update state if mounted
       if (isMounted.current) {
         setIsVerifyingPayment(false);
       }
     }
-  };
+  }, [orderDetails.orderId, orderDetails.amount, orderDetails.timestamp, user?.name, selectedUserName, navigation, showError]);
 
   /**
    * Handle Razorpay Payment with SDK
    */
-  const handlePayment = async () => {
+  const handlePayment = useCallback(async () => {
     try {
-      // ✅ Check if mounted before starting
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted, aborting payment');
+        console.log('⚠️ Component unmounted, aborting payment');
         return;
       }
       
@@ -241,13 +283,35 @@ export default function PayScreen({ route, navigation }: Props) {
       // 1. Create Razorpay order from backend
       const paymentResponse = await paymentApi.createPayment(orderDetails.orderId);
       
-      // ✅ Check if still mounted after first async operation
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted after creating payment');
+        console.log('⚠️ Component unmounted after creating payment');
         return;
       }
       
       if (!paymentResponse.success) {
+        if (paymentResponse.message?.includes('Payment already initiated')) {
+          console.log('⚠️ Backend says payment already initiated');
+          
+          showWarning(
+            'This order already has a pending payment. Please wait a few minutes and try again, or contact support if the issue persists.',
+            {
+              label: 'Contact Support',
+              onPress: () => {
+                try {
+                  navigation.navigate('Support');
+                } catch (err) {
+                  console.log('Navigation error:', err);
+                }
+              }
+            }
+          );
+          
+          if (isMounted.current) {
+            setIsProcessingPayment(false);
+          }
+          return;
+        }
+        
         throw new Error(paymentResponse.message || 'Failed to create payment');
       }
       
@@ -275,31 +339,46 @@ export default function PayScreen({ route, navigation }: Props) {
       
       console.log('🌐 Opening Razorpay checkout...');
       
-      // Open Razorpay modal (this can take a while - user interaction needed)
-      const razorpayResponse = await RazorpayCheckout.open(razorpayOptions);
+      // ✅ Mark payment as in progress (in Razorpay modal)
+      isPaymentInProgress.current = true;
       
-      // ✅ CRITICAL CHECK: Component might have unmounted while Razorpay was open
-      if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted after Razorpay, payment may have succeeded but cannot verify');
-        // Payment succeeded but component is gone - this is handled by the backend
-        return;
+      try {
+        // Open Razorpay modal (this can take a while - user interaction needed)
+        const razorpayResponse = await RazorpayCheckout.open(razorpayOptions);
+        
+        // ✅ Payment succeeded
+        isPaymentInProgress.current = false;
+        
+        if (!isMounted.current) {
+          console.log('⚠️ Component unmounted after Razorpay success');
+          return;
+        }
+        
+        console.log('✅ Payment successful!');
+        console.log('Payment ID:', razorpayResponse.razorpay_payment_id);
+        
+        // 3. Verify payment with backend
+        await verifyPaymentWithBackend(razorpayResponse);
+        
+      } catch (razorpayError: any) {
+        // ✅ Razorpay SDK threw error (user cancelled or payment failed)
+        isPaymentInProgress.current = false;
+        
+        // Re-throw to outer catch block
+        throw razorpayError;
       }
       
-      console.log('✅ Payment successful!');
-      console.log('Payment ID:', razorpayResponse.razorpay_payment_id);
-      
-      // 3. Verify payment with backend
-      await verifyPaymentWithBackend(razorpayResponse);
-      
     } catch (error: any) {
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.error('❌ PAYMENT ERROR');
-      console.error('Error:', error);
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('❌ PAYMENT ERROR');
+      console.log('Error:', error);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       
-      // ✅ Only show alerts if mounted
+      // ✅ Ensure payment is marked as not in progress
+      isPaymentInProgress.current = false;
+      
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted, skipping error alert');
+        console.log('⚠️ Component unmounted, skipping error toast');
         return;
       }
       
@@ -307,60 +386,57 @@ export default function PayScreen({ route, navigation }: Props) {
       if (error.code === 0) {
         // User cancelled payment
         console.log('⚠️ User cancelled payment');
-        Alert.alert(
-          'Payment Cancelled',
+        showWarning(
           'You cancelled the payment. Your order is still pending.',
-          [
-            {
-              text: 'Try Again',
-              onPress: () => {
-                if (isMounted.current) {
-                  handlePayment();
-                }
+          {
+            label: 'Try Again',
+            onPress: () => {
+              if (isMounted.current) {
+                handlePayment();
               }
-            },
-            {
-              text: 'Cancel',
-              style: 'cancel'
             }
-          ]
+          }
         );
       } else if (error.code === 2) {
         // Payment failed
-        console.error('❌ Payment failed');
-        Alert.alert(
-          'Payment Failed',
+        console.log('❌ Payment failed');
+        showError(
           'Your payment failed. Please try again or use a different payment method.',
-          [
-            {
-              text: 'Retry',
-              onPress: () => {
-                if (isMounted.current) {
-                  handlePayment();
-                }
+          {
+            label: 'Retry',
+            onPress: () => {
+              if (isMounted.current) {
+                handlePayment();
               }
-            },
-            {
-              text: 'Cancel',
-              style: 'cancel'
             }
-          ]
+          }
+        );
+      } else if (error.code === 5) {
+        // User cancelled payment
+        console.log('⚠️ User cancelled payment (code 5)');
+        showError(
+          'You cancelled the payment. Your order is still pending.',
+          {
+            label: 'Retry',
+            onPress: () => {
+              if (isMounted.current) {
+                handlePayment();
+              }
+            }
+          }
         );
       } else {
         // Other errors
-        Alert.alert(
-          'Error',
-          error.description || error.message || 'An error occurred during payment',
-          [{ text: 'OK' }]
+        showError(
+          error.description || error.message || 'An error occurred during payment'
         );
       }
       
-      // ✅ Only update state if mounted
       if (isMounted.current) {
         setIsProcessingPayment(false);
       }
     }
-  };
+  }, [orderDetails.orderId, orderDetails.amount, user?.mobile, user?.name, selectedUserName, showWarning, showError, navigation, verifyPaymentWithBackend]);
 
   /* STICKY FOOTER WITH DYNAMIC SAFE AREA */
   const renderFooter = useCallback(
@@ -374,16 +450,16 @@ export default function PayScreen({ route, navigation }: Props) {
               <Pressable 
                 style={[
                   styles.payBtn, 
-                  (isProcessingPayment || isVerifyingPayment) && styles.payBtnDisabled
+                  (isProcessingPayment || isVerifyingPayment || isPaymentInProgress.current) && styles.payBtnDisabled
                 ]} 
                 onPress={handlePayment}
-                disabled={isProcessingPayment || isVerifyingPayment}
+                disabled={isProcessingPayment || isVerifyingPayment || isPaymentInProgress.current}
               >
                 {isProcessingPayment || isVerifyingPayment ? (
                   <View style={styles.loadingContainer}>
                     <ActivityIndicator size="small" color="#FFFFFF" />
                     <Text style={styles.payText}>
-                      {isVerifyingPayment ? 'Verifying...' : 'Processing...'}
+                      {isVerifyingPayment ? 'Verifying...' : isPaymentInProgress.current ? 'In Razorpay...' : 'Processing...'}
                     </Text>
                   </View>
                 ) : (
@@ -397,24 +473,32 @@ export default function PayScreen({ route, navigation }: Props) {
         </BottomSheetFooter>
       );
     },
-    [orderDetails.amount, isProcessingPayment, isVerifyingPayment, insets.bottom],
+    [orderDetails.amount, isProcessingPayment, isVerifyingPayment, insets.bottom, handlePayment],
   );
 
   const spacerHeight = 100 + (insets.bottom > 0 ? insets.bottom : 0);
 
   return (
     <GestureHandlerRootView style={styles.container}>
+      <ErrorToast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onDismiss={hideToast}
+        action={toast.action}
+      />
+
       <BottomSheet
         ref={bottomSheetRef}
         index={0}
         snapPoints={snapPoints}
-        enablePanDownToClose={!isProcessingPayment && !isVerifyingPayment}
+        enablePanDownToClose={!isProcessingPayment && !isVerifyingPayment && !isPaymentInProgress.current}
         backdropComponent={renderBackdrop}
         footerComponent={renderFooter}
         backgroundStyle={styles.sheetBackground}
         handleIndicatorStyle={styles.handleIndicator}
         onClose={() => {
-          if (!isProcessingPayment && !isVerifyingPayment) {
+          if (!isProcessingPayment && !isVerifyingPayment && !isPaymentInProgress.current) {
             if (isMounted.current && navigation.canGoBack()) {
               navigation.goBack();
             }

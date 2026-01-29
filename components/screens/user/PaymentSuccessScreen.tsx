@@ -65,7 +65,7 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
       
       // Cancel any pending operations
       if (isFetchingReport) {
-        console.warn('⚠️ Component unmounted during report fetch');
+        console.log('⚠️ Component unmounted during report fetch');
       }
     };
   }, [isFetchingReport]);
@@ -85,12 +85,12 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
             routes: [{ name: 'App' }],
           });
         } catch (navError) {
-          console.error('❌ Navigation error:', navError);
+          console.log('❌ Navigation error:', navError);
           // Fallback: try popToTop
           try {
             navigation.popToTop();
           } catch (fallbackError) {
-            console.error('❌ Fallback navigation also failed:', fallbackError);
+            console.log('❌ Fallback navigation also failed:', fallbackError);
           }
         }
         return true; // Prevent default back
@@ -119,7 +119,7 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
     if (reportId) {
       // ✅ Check if mounted before starting
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted, aborting report fetch');
+        console.log('⚠️ Component unmounted, aborting report fetch');
         return;
       }
       
@@ -132,7 +132,7 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
         .then((fetchedReport) => {
           // ✅ Check if still mounted after async operation
           if (!isMounted.current) {
-            console.warn('⚠️ Component unmounted after report fetch, skipping state update');
+            console.log('⚠️ Component unmounted after report fetch, skipping state update');
             return;
           }
           
@@ -145,14 +145,14 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
         .catch((err) => {
           // ✅ Check if still mounted before showing alert
           if (!isMounted.current) {
-            console.warn('⚠️ Component unmounted, skipping error alert');
+            console.log('⚠️ Component unmounted, skipping error alert');
             return;
           }
           
-          console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          console.error('❌ Failed to fetch report');
-          console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          console.error('Error:', err);
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.log('❌ Failed to fetch report');
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.log('Error:', err);
           setIsFetchingReport(false);
           
           Alert.alert(
@@ -162,10 +162,10 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
           );
         });
     } else {
-      console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.warn('⚠️ No reportId provided to PaymentSuccessScreen');
-      console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.warn('Full route.params:', route.params);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('⚠️ No reportId provided to PaymentSuccessScreen');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('Full route.params:', route.params);
     }
   }, [reportId, paymentId, dispatch]);
 
@@ -177,12 +177,12 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
     
     // ✅ Check if mounted
     if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting navigation');
+      console.log('⚠️ Component unmounted, aborting navigation');
       return;
     }
     
     if (!selectedReport) {
-      console.error('❌ selectedReport is null!');
+      console.log('❌ selectedReport is null!');
       Alert.alert(
         'Report Not Available',
         'Please wait while we fetch your report data, or try again from the Reports tab.',
@@ -229,11 +229,11 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
           data: reportData,
         });
       } catch (navError) {
-        console.error('❌ Navigation error:', navError);
+        console.log('❌ Navigation error:', navError);
         Alert.alert('Error', 'Failed to open report. Please try again from the Reports tab.');
       }
     } catch (transformError) {
-      console.error('❌ Error transforming report data:', transformError);
+      console.log('❌ Error transforming report data:', transformError);
       
       // ✅ Only show alert if mounted
       if (isMounted.current) {
@@ -245,21 +245,21 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
   // ✅ Safe navigation helper
   const handleNavigation = (screen: string) => {
     if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting navigation');
+      console.log('⚠️ Component unmounted, aborting navigation');
       return;
     }
     
     try {
       navigation.navigate(screen);
     } catch (error) {
-      console.error('❌ Navigation error:', error);
+      console.log('❌ Navigation error:', error);
     }
   };
 
   // ✅ Safe popToTop helper
   const handleClose = () => {
     if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting navigation');
+      console.log('⚠️ Component unmounted, aborting navigation');
       return;
     }
     
@@ -270,12 +270,12 @@ export default function PaymentSuccessScreen({ navigation, route }: any) {
         routes: [{ name: 'App' }],
       });
     } catch (error) {
-      console.error('❌ Navigation error:', error);
+      console.log('❌ Navigation error:', error);
       // Fallback
       try {
         navigation.popToTop();
       } catch (fallbackError) {
-        console.error('❌ Fallback also failed:', fallbackError);
+        console.log('❌ Fallback also failed:', fallbackError);
       }
     }
   };

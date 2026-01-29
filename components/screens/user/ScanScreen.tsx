@@ -1,4 +1,4 @@
-// components/screens/user/ScanScreen.tsx
+// components/screens/user/ScanScreen.tsx - FIXED: Custom error toast
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useEffect, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,6 +29,10 @@ import { useAppDispatch, useAppSelector } from '../../../store/hook';
 import { createOrder } from '../../../store/slices/orderSlice';
 import { storage } from '../../../utils/storage';
 
+// ✅ Custom error toast
+import ErrorToast from '../../common/ErrorToast';
+import { useErrorToast } from '../../../hooks/useErrorToast';
+
 type Props = {
   navigation: any;
 };
@@ -46,6 +50,9 @@ export default function ScanScreen({ navigation }: Props) {
   const dispatch = useAppDispatch();
   const { isLoading: orderLoading } = useAppSelector(state => state.orders);
   const { user } = useAppSelector(state => state.auth);
+
+  // ✅ Custom error toast
+  const { toast, showError, showWarning, hideToast } = useErrorToast();
 
   // ✅ REFS AND ANIMATIONS
   const scanLineAnim = useRef(new Animated.Value(0)).current;
@@ -85,9 +92,9 @@ export default function ScanScreen({ navigation }: Props) {
         };
       }
 
-      console.error('❌ Storage user data incomplete:', storedUser);
+      console.log('❌ Storage user data incomplete:', storedUser);
     } catch (error) {
-      console.error('❌ Failed to get user from storage:', error);
+      console.log('❌ Failed to get user from storage:', error);
     }
 
     throw new Error('User data not found. Please log in again.');
@@ -103,18 +110,14 @@ export default function ScanScreen({ navigation }: Props) {
         console.log('User ID:', userData.userId);
         console.log('Mobile:', userData.mobile);
       } catch (error: any) {
-        console.error('❌ ScanScreen: User verification failed on mount');
-        console.error('Error:', error.message);
-        Alert.alert(
-          'Authentication Required',
-          'Please log in again to scan QR codes.',
-          [
-            {
-              text: 'OK',
-              onPress: () => navigation.replace('Auth'),
-            },
-          ],
-        );
+        console.log('❌ ScanScreen: User verification failed on mount');
+        console.log('Error:', error.message);
+        
+        // ✅ Use custom toast instead of Alert
+        showError('Please log in again to scan QR codes.', {
+          label: 'Login',
+          onPress: () => navigation.replace('Auth')
+        });
       }
     };
 
@@ -140,7 +143,7 @@ export default function ScanScreen({ navigation }: Props) {
     })();
   }, []);
 
-  // ✅ Re-check camera permission when app becomes active (user returns from Settings)
+  // ✅ Re-check camera permission when app becomes active
   useEffect(() => {
     const handleAppStateChange = async (nextAppState: string) => {
       if (nextAppState === 'active') {
@@ -173,6 +176,7 @@ export default function ScanScreen({ navigation }: Props) {
       isMounted.current = false;
     };
   }, []);
+  
   // ✅ Handle hardware back button
   useEffect(() => {
     const backAction = () => {
@@ -227,7 +231,7 @@ export default function ScanScreen({ navigation }: Props) {
 
     const unsubscribeBlur = navigation.addListener('blur', () => {
       setIsActive(false);
-      setTorchOn(false); // ✅ Turn off torch when leaving screen
+      setTorchOn(false);
     });
 
     return () => {
@@ -241,10 +245,7 @@ export default function ScanScreen({ navigation }: Props) {
     if (hasTorch && isActive) {
       setTorchOn(!torchOn);
     } else if (!hasTorch) {
-      Alert.alert(
-        'Flashlight Not Available',
-        'Your device does not have a flashlight.',
-      );
+      showWarning('Your device does not have a flashlight.');
     }
   };
 
@@ -314,7 +315,7 @@ export default function ScanScreen({ navigation }: Props) {
 
       // ✅ CHECK BEFORE navigation
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted, skipping navigation');
+        console.log('⚠️ Component unmounted, skipping navigation');
         return;
       }
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -340,11 +341,11 @@ export default function ScanScreen({ navigation }: Props) {
         orderId: result.order_id,
       });
     } catch (error: any) {
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.error('❌ ERROR PROCESSING QR CODE');
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.error('Error:', error);
-      console.error('Message:', error.message || error);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('❌ ERROR PROCESSING QR CODE');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('Error:', error);
+      console.log('Message:', error.message || error);
 
       // ✅ CHECK BEFORE setState
       if (!isMounted.current) return;
@@ -352,30 +353,31 @@ export default function ScanScreen({ navigation }: Props) {
       setScannedData(null);
       setIsActive(true);
 
-      Alert.alert(
-        'QR Code Processing Failed',
-        error.message || 'Failed to process QR code. Please try again.',
-        [
-          {
-            text: 'Retry',
-            onPress: () => {
-              setScannedData(null);
-              setIsActive(true);
-            },
-          },
-        ],
-      );
+      // ✅ Better error messages based on error type
+      let errorMessage = 'Invalid QR code. Please scan a valid QR code and try again.';
+      
+      if (error.message?.includes('Invalid encrypted payload') || 
+          error.message?.includes('Malformed payload')) {
+        errorMessage = 'This is not a valid MySehat QR code. Please scan the QR code shown on the BMI machine screen.';
+      } else if (error.message?.includes('Machine') && error.message?.includes('not found')) {
+        errorMessage = 'Machine not found or inactive. Please contact support.';
+      } else if (error.message?.includes('User data not found')) {
+        errorMessage = 'Session expired. Please log in again.';
+      } else if (error.message?.includes('network') || error.message?.includes('Network')) {
+        errorMessage = 'Network error. Please check your internet connection and try again.';
+      }
+
+      // ✅ Use custom toast instead of Alert.alert
+      showError(errorMessage, {
+        label: 'Retry',
+        onPress: () => {
+          setScannedData(null);
+          setIsActive(true);
+        }
+      });
     }
   };
 
-  // // ✅ Handle back navigation
-  // const handleBack = () => {
-  //   if (navigation.canGoBack()) {
-  //     navigation.goBack();
-  //   }
-  // };
-
-  // ✅ FIX handleBack
   const handleBack = () => {
     if (isMounted.current && navigation.canGoBack()) {
       navigation.goBack();
@@ -386,7 +388,6 @@ export default function ScanScreen({ navigation }: Props) {
   if (device == null) {
     return (
       <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-        {/* ✅ Solid Header Bar */}
         <View style={styles.header}>
           <Pressable onPress={handleBack} style={styles.backButton}>
             <ArrowLeft size={24} color="#FAFAFA" />
@@ -405,7 +406,6 @@ export default function ScanScreen({ navigation }: Props) {
   if (!hasPermission) {
     return (
       <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-        {/* ✅ Solid Header Bar */}
         <View style={styles.header}>
           <Pressable onPress={handleBack} style={styles.backButton}>
             <ArrowLeft size={24} color="#FAFAFA" />
@@ -430,7 +430,16 @@ export default function ScanScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      {/* ✅ Solid Header Bar - Always on top */}
+      {/* ✅ Custom Error Toast */}
+      <ErrorToast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onDismiss={hideToast}
+        action={toast.action}
+      />
+
+      {/* ✅ Solid Header Bar */}
       <View style={styles.header}>
         <Pressable onPress={handleBack} style={styles.backButton}>
           <ArrowLeft size={24} color="#FAFAFA" />
@@ -463,7 +472,7 @@ export default function ScanScreen({ navigation }: Props) {
                 />
               </View>
 
-              {/* ✅ Torch Button - Below Frame */}
+              {/* ✅ Torch Button */}
               {hasTorch && (
                 <Pressable
                   style={[
@@ -503,7 +512,7 @@ export default function ScanScreen({ navigation }: Props) {
           </View>
         </View>
 
-        {/* ✅ Loading Overlay - Shows during backend processing */}
+        {/* ✅ Loading Overlay */}
         {orderLoading && (
           <View style={styles.processingOverlay}>
             <View style={styles.processingBox}>
@@ -526,7 +535,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#0A0A0A',
   },
 
-  // ✅ Solid Header Bar (Like ReportsScreen)
   header: {
     height: 56,
     flexDirection: 'row',
@@ -543,7 +551,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  // ✅ Camera Container (fills remaining space)
   cameraContainer: {
     flex: 1,
     backgroundColor: '#020617',
@@ -612,7 +619,6 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 20,
   },
 
-  // ✅ Torch Button Styles
   torchButton: {
     width: 56,
     height: 56,

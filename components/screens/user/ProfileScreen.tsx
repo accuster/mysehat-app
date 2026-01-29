@@ -225,7 +225,7 @@ export default function ProfileScreen({ navigation }: Props) {
         navigation.goBack();
       }
     } catch (error) {
-      console.error('❌ Navigation error:', error);
+      console.log('❌ Navigation error:', error);
     }
   };
 
@@ -318,7 +318,7 @@ export default function ProfileScreen({ navigation }: Props) {
         return false;
       }
     } catch (err) {
-      console.error('❌ Error requesting camera permission:', err);
+      console.log('❌ Error requesting camera permission:', err);
 
       // ✅ Check before showing alert
       if (isMounted.current) {
@@ -341,7 +341,7 @@ export default function ProfileScreen({ navigation }: Props) {
     }
 
     if (response.errorCode) {
-      console.error('ImagePicker Error:', response.errorMessage);
+      console.log('ImagePicker Error:', response.errorMessage);
       Alert.alert(
         'Error',
         response.errorMessage || 'Failed to select image. Please try again.',
@@ -482,7 +482,7 @@ export default function ProfileScreen({ navigation }: Props) {
   const handleSave = async () => {
     // ✅ Check if mounted
     if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting save');
+      console.log('⚠️ Component unmounted, aborting save');
       return;
     }
 
@@ -535,7 +535,7 @@ export default function ProfileScreen({ navigation }: Props) {
 
       // ✅ Check if still mounted after async operation
       if (!isMounted.current) {
-        console.warn(
+        console.log(
           '⚠️ Component unmounted after update, skipping UI updates',
         );
         return;
@@ -547,7 +547,7 @@ export default function ProfileScreen({ navigation }: Props) {
         setShowSuccessModal(true);
       }
     } catch (error: any) {
-      console.error('❌ Profile update error:', error);
+      console.log('❌ Profile update error:', error);
 
       // ✅ Only show alert if mounted
       if (isMounted.current) {
@@ -568,7 +568,7 @@ export default function ProfileScreen({ navigation }: Props) {
         navigation.goBack();
       }
     } catch (error) {
-      console.error('❌ Navigation error:', error);
+      console.log('❌ Navigation error:', error);
     }
   };
 

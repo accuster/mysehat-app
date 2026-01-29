@@ -48,7 +48,7 @@ export const fetchMembers = createAsyncThunk(
       console.log('✅ Members fetched:', members.length);
       return members;
     } catch (error: any) {
-      console.error('❌ Error in fetchMembers:', error.message);
+      console.log('❌ Error in fetchMembers:', error.message);
       return rejectWithValue(error.message);
     }
   }
@@ -71,7 +71,7 @@ export const createMember = createAsyncThunk(
       console.log('✅ Member created:', member.id);
       return member;
     } catch (error: any) {
-      console.error('❌ Error in createMember:', error.message);
+      console.log('❌ Error in createMember:', error.message);
       return rejectWithValue(error.message);
     }
   }
@@ -95,7 +95,7 @@ export const updateMember = createAsyncThunk(
       console.log('✅ Member updated:', member.id);
       return member;
     } catch (error: any) {
-      console.error('❌ Error in updateMember:', error.message);
+      console.log('❌ Error in updateMember:', error.message);
       return rejectWithValue(error.message);
     }
   }
@@ -118,7 +118,7 @@ export const deleteMember = createAsyncThunk(
       console.log('✅ Member deleted');
       return id;
     } catch (error: any) {
-      console.error('❌ Error in deleteMember:', error.message);
+      console.log('❌ Error in deleteMember:', error.message);
       return rejectWithValue(error.message);
     }
   }
@@ -156,10 +156,10 @@ export const updateProfile = createAsyncThunk(
       
       return updatedProfile;
     } catch (error: any) {
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.error('❌ ERROR IN PROFILE UPDATE');
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.error('Error:', error.message);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('❌ ERROR IN PROFILE UPDATE');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('Error:', error.message);
       return rejectWithValue(error.message);
     }
   }
@@ -198,7 +198,7 @@ const memberSlice = createSlice({
         state.members = action.payload;
       })
       .addCase(fetchMembers.rejected, (state, action) => {
-        console.error('❌ fetchMembers: rejected');
+        console.log('❌ fetchMembers: rejected');
         state.isLoading = false;
         state.error = action.payload as string;
       });
@@ -216,7 +216,7 @@ const memberSlice = createSlice({
         state.members.push(action.payload);
       })
       .addCase(createMember.rejected, (state, action) => {
-        console.error('❌ createMember: rejected');
+        console.log('❌ createMember: rejected');
         state.isLoading = false;
         state.error = action.payload as string;
       });
@@ -240,7 +240,7 @@ const memberSlice = createSlice({
         }
       })
       .addCase(updateMember.rejected, (state, action) => {
-        console.error('❌ updateMember: rejected');
+        console.log('❌ updateMember: rejected');
         state.isLoading = false;
         state.error = action.payload as string;
       });
@@ -261,7 +261,7 @@ const memberSlice = createSlice({
         }
       })
       .addCase(deleteMember.rejected, (state, action) => {
-        console.error('❌ deleteMember: rejected');
+        console.log('❌ deleteMember: rejected');
         state.isLoading = false;
         state.error = action.payload as string;
       });
@@ -293,8 +293,8 @@ const memberSlice = createSlice({
         }
       })
       .addCase(updateProfile.rejected, (state, action) => {
-        console.error('❌ updateProfile: rejected');
-        console.error('Error:', action.payload);
+        console.log('❌ updateProfile: rejected');
+        console.log('Error:', action.payload);
         state.isUpdatingProfile = false;
         state.profileUpdateError = action.payload as string;
       });

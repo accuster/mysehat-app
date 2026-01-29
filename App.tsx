@@ -52,10 +52,10 @@ function App() {
         console.log('Handlers should now be listening for events');
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       } catch (error) {
-        console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.error('❌ Notification setup FAILED');
-        console.error('Error:', error);
-        console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('❌ Notification setup FAILED');
+        console.log('Error:', error);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       }
     };
 

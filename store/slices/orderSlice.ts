@@ -84,7 +84,7 @@ export const createOrder = createAsyncThunk(
       
       return rejectWithValue(response.message || 'Failed to create order');
     } catch (error: any) {
-      console.error('❌ Redux: Error creating order:', error.message);
+      console.log('❌ Redux: Error creating order:', error.message);
       return rejectWithValue(error.message || 'An error occurred while creating order');
     }
   }
@@ -107,7 +107,7 @@ export const fetchOrderById = createAsyncThunk(
       
       return rejectWithValue(response.message || 'Failed to fetch order');
     } catch (error: any) {
-      console.error('❌ Redux: Error fetching order:', error.message);
+      console.log('❌ Redux: Error fetching order:', error.message);
       return rejectWithValue(error.message || 'An error occurred while fetching order');
     }
   }
@@ -130,7 +130,7 @@ export const fetchUserOrders = createAsyncThunk(
       
       return rejectWithValue(response.message || 'Failed to fetch orders');
     } catch (error: any) {
-      console.error('❌ Redux: Error fetching user orders:', error.message);
+      console.log('❌ Redux: Error fetching user orders:', error.message);
       return rejectWithValue(error.message || 'An error occurred while fetching orders');
     }
   }
@@ -157,7 +157,7 @@ export const updateOrderUser = createAsyncThunk(
       
       return rejectWithValue(response.message || 'Failed to update order');
     } catch (error: any) {
-      console.error('❌ Redux: Error updating order user:', error.message);
+      console.log('❌ Redux: Error updating order user:', error.message);
       return rejectWithValue(error.message || 'An error occurred while updating order');
     }
   }
@@ -195,8 +195,8 @@ const orderSlice = createSlice({
         state.currentOrder = action.payload;
       })
       .addCase(createOrder.rejected, (state, action) => {
-        console.error('❌ createOrder: rejected');
-        console.error('Error:', action.payload);
+        console.log('❌ createOrder: rejected');
+        console.log('Error:', action.payload);
         state.isLoading = false;
         state.error = action.payload as string;
       });
@@ -220,8 +220,8 @@ const orderSlice = createSlice({
         }
       })
       .addCase(fetchOrderById.rejected, (state, action) => {
-        console.error('❌ fetchOrderById: rejected');
-        console.error('Error:', action.payload);
+        console.log('❌ fetchOrderById: rejected');
+        console.log('Error:', action.payload);
         state.isLoading = false;
         state.error = action.payload as string;
       });
@@ -240,8 +240,8 @@ const orderSlice = createSlice({
         state.lastFetch = Date.now();
       })
       .addCase(fetchUserOrders.rejected, (state, action) => {
-        console.error('❌ fetchUserOrders: rejected');
-        console.error('Error:', action.payload);
+        console.log('❌ fetchUserOrders: rejected');
+        console.log('Error:', action.payload);
         state.isLoading = false;
         state.error = action.payload as string;
       });
@@ -263,8 +263,8 @@ const orderSlice = createSlice({
         }
       })
       .addCase(updateOrderUser.rejected, (state, action) => {
-        console.error('❌ updateOrderUser: rejected');
-        console.error('Error:', action.payload);
+        console.log('❌ updateOrderUser: rejected');
+        console.log('Error:', action.payload);
         state.isLoading = false;
         state.error = action.payload as string;
       });

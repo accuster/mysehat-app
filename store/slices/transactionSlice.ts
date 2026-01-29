@@ -46,7 +46,7 @@ export const fetchTransactions = createAsyncThunk(
       
       return rejectWithValue(response.message || 'Failed to fetch transactions');
     } catch (error: any) {
-      console.error('❌ Redux: Error fetching transactions:', error.message);
+      console.log('❌ Redux: Error fetching transactions:', error.message);
       return rejectWithValue(error.message || 'An error occurred while fetching transactions');
     }
   }
@@ -69,7 +69,7 @@ export const fetchTransactionById = createAsyncThunk(
       
       return rejectWithValue(response.message || 'Failed to fetch transaction');
     } catch (error: any) {
-      console.error('❌ Redux: Error fetching transaction:', error.message);
+      console.log('❌ Redux: Error fetching transaction:', error.message);
       return rejectWithValue(error.message || 'An error occurred while fetching transaction');
     }
   }
@@ -108,8 +108,8 @@ const transactionSlice = createSlice({
         state.lastFetch = Date.now();
       })
       .addCase(fetchTransactions.rejected, (state, action) => {
-        console.error('❌ fetchTransactions: rejected');
-        console.error('Error:', action.payload);
+        console.log('❌ fetchTransactions: rejected');
+        console.log('Error:', action.payload);
         state.isLoading = false;
         state.error = action.payload as string;
       });
@@ -127,8 +127,8 @@ const transactionSlice = createSlice({
         state.selectedTransaction = action.payload;
       })
       .addCase(fetchTransactionById.rejected, (state, action) => {
-        console.error('❌ fetchTransactionById: rejected');
-        console.error('Error:', action.payload);
+        console.log('❌ fetchTransactionById: rejected');
+        console.log('Error:', action.payload);
         state.isLoading = false;
         state.error = action.payload as string;
       });

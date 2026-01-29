@@ -84,10 +84,10 @@ export default function InstantReport({ route, navigation }: Props) {
       console.log('🧹 InstantReport: Unmounting...');
 
       if (isGeneratingRef.current) {
-        console.warn(
+        console.log(
           '⚠️ CRITICAL: Component unmounting during PDF generation!',
         );
-        console.warn(
+        console.log(
           '⚠️ All state updates will be blocked by isMounted checks',
         );
       }
@@ -102,7 +102,7 @@ export default function InstantReport({ route, navigation }: Props) {
     console.log('⬅️ handleBack called');
 
     if (isGenerating || isSharing) {
-      console.warn('⚠️ Cannot navigate back - PDF is generating/sharing');
+      console.log('⚠️ Cannot navigate back - PDF is generating/sharing');
       Alert.alert(
         'Please Wait',
         'PDF is being processed. Please wait for it to complete.',
@@ -112,7 +112,7 @@ export default function InstantReport({ route, navigation }: Props) {
     }
 
     if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting navigation');
+      console.log('⚠️ Component unmounted, aborting navigation');
       return;
     }
 
@@ -121,10 +121,10 @@ export default function InstantReport({ route, navigation }: Props) {
         console.log('✅ Navigating back safely');
         navigation.goBack();
       } else {
-        console.warn('⚠️ Cannot go back - no previous screen');
+        console.log('⚠️ Cannot go back - no previous screen');
       }
     } catch (error) {
-      console.error('❌ Navigation error:', error);
+      console.log('❌ Navigation error:', error);
     }
   }, [navigation, isGenerating, isSharing]);
 
@@ -215,7 +215,7 @@ export default function InstantReport({ route, navigation }: Props) {
 
     try {
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted, aborting share');
+        console.log('⚠️ Component unmounted, aborting share');
         return;
       }
 
@@ -231,8 +231,8 @@ export default function InstantReport({ route, navigation }: Props) {
 
       // ✅ Check if still mounted after async PDF generation
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted during PDF generation');
-        console.warn('⚠️ PDF was saved at:', generatedPath);
+        console.log('⚠️ Component unmounted during PDF generation');
+        console.log('⚠️ PDF was saved at:', generatedPath);
         setIsSharing(false); // Clean up state
         return;
       }
@@ -261,10 +261,10 @@ export default function InstantReport({ route, navigation }: Props) {
       console.log('✅ Share Report: Completed Successfully');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     } catch (error: any) {
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.error('❌ Share Report: FAILED');
-      console.error('Error:', error);
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('❌ Share Report: FAILED');
+      console.log('Error:', error);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       if (isMounted.current) {
         Alert.alert(
@@ -278,7 +278,7 @@ export default function InstantReport({ route, navigation }: Props) {
         // ✅ Make sure to reset state on error
         setIsSharing(false);
       } else {
-        console.warn('⚠️ Component unmounted, skipping error alert');
+        console.log('⚠️ Component unmounted, skipping error alert');
       }
     }
   };
@@ -290,7 +290,7 @@ export default function InstantReport({ route, navigation }: Props) {
 
     try {
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted, aborting download');
+        console.log('⚠️ Component unmounted, aborting download');
         return;
       }
 
@@ -303,11 +303,11 @@ export default function InstantReport({ route, navigation }: Props) {
 
       // ✅ CRITICAL - Check if still mounted after async
       if (!isMounted.current) {
-        console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.warn('⚠️ COMPONENT UNMOUNTED DURING PDF GENERATION!');
-        console.warn('⚠️ Aborting all state updates and alerts');
-        console.warn('⚠️ PDF was saved at:', path);
-        console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('⚠️ COMPONENT UNMOUNTED DURING PDF GENERATION!');
+        console.log('⚠️ Aborting all state updates and alerts');
+        console.log('⚠️ PDF was saved at:', path);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         isGeneratingRef.current = false;
 
         // ✅ STILL SHOW NOTIFICATION even if unmounted!
@@ -346,10 +346,10 @@ export default function InstantReport({ route, navigation }: Props) {
       console.log('✅ Download Report: Completed Successfully');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     } catch (error: any) {
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.error('❌ Download Report: FAILED');
-      console.error('Error:', error);
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('❌ Download Report: FAILED');
+      console.log('Error:', error);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       if (isMounted.current) {
         Alert.alert(
@@ -358,7 +358,7 @@ export default function InstantReport({ route, navigation }: Props) {
           [{ text: 'OK' }],
         );
       } else {
-        console.warn('⚠️ Component unmounted, skipping error alert');
+        console.log('⚠️ Component unmounted, skipping error alert');
       }
     } finally {
       // ✅ Make sure loader is hidden in case of error
@@ -367,7 +367,7 @@ export default function InstantReport({ route, navigation }: Props) {
         setIsGenerating(false);
         isGeneratingRef.current = false;
       } else {
-        console.warn('⚠️ Component unmounted, skipping state reset');
+        console.log('⚠️ Component unmounted, skipping state reset');
         isGeneratingRef.current = false;
       }
     }

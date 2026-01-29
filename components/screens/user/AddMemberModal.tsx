@@ -110,7 +110,7 @@ export default function AddMemberModal({
 
     // ✅ Check if mounted before starting
     if (!isMounted.current) {
-      console.warn('⚠️ Modal unmounted, aborting save');
+      console.log('⚠️ Modal unmounted, aborting save');
       return;
     }
 
@@ -125,7 +125,7 @@ export default function AddMemberModal({
 
       // ✅ Check if still mounted after async operation
       if (!isMounted.current) {
-        console.warn('⚠️ Modal unmounted after save');
+        console.log('⚠️ Modal unmounted after save');
         return;
       }
 
@@ -134,7 +134,7 @@ export default function AddMemberModal({
       resetForm();
       onClose();
     } catch (err: any) {
-      console.error('❌ Save error:', err);
+      console.log('❌ Save error:', err);
       // Error is already shown by parent component
     }
   };
@@ -143,7 +143,7 @@ export default function AddMemberModal({
   const handleClose = () => {
     // ✅ Check if mounted before state updates
     if (!isMounted.current) {
-      console.warn('⚠️ Modal unmounted, aborting close');
+      console.log('⚠️ Modal unmounted, aborting close');
       return;
     }
 

@@ -129,8 +129,8 @@ class MemberApiService {
       console.log('✅ Members fetched:', response.data.count);
       return response.data.members;
     } catch (error: any) {
-      console.error('❌ Error fetching members:', error.message);
-      console.error('Error details:', error.response?.data);
+      console.log('❌ Error fetching members:', error.message);
+      console.log('Error details:', error.response?.data);
       throw this.handleError(error);
     }
   }
@@ -150,7 +150,7 @@ class MemberApiService {
       console.log('✅ Member created:', response.data.member.id);
       return response.data.member;
     } catch (error: any) {
-      console.error('❌ Error creating member:', error.message);
+      console.log('❌ Error creating member:', error.message);
       throw this.handleError(error);
     }
   }
@@ -169,7 +169,7 @@ class MemberApiService {
       console.log('✅ Member fetched:', response.data.member.name);
       return response.data.member;
     } catch (error: any) {
-      console.error('❌ Error fetching member:', error.message);
+      console.log('❌ Error fetching member:', error.message);
       throw this.handleError(error);
     }
   }
@@ -189,7 +189,7 @@ class MemberApiService {
       console.log('✅ Member updated:', response.data.member.name);
       return response.data.member;
     } catch (error: any) {
-      console.error('❌ Error updating member:', error.message);
+      console.log('❌ Error updating member:', error.message);
       throw this.handleError(error);
     }
   }
@@ -203,7 +203,7 @@ class MemberApiService {
       await this.api.delete(`/members/${id}`);
       console.log('✅ Member deleted');
     } catch (error: any) {
-      console.error('❌ Error deleting member:', error.message);
+      console.log('❌ Error deleting member:', error.message);
       throw this.handleError(error);
     }
   }
@@ -306,8 +306,8 @@ class MemberApiService {
       
       return response.data.data;
     } catch (error: any) {
-      console.error('❌ Error updating profile:', error.message);
-      console.error('Error details:', error.response?.data);
+      console.log('❌ Error updating profile:', error.message);
+      console.log('Error details:', error.response?.data);
       throw this.handleError(error);
     }
   }

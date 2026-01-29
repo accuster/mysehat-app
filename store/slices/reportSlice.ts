@@ -68,7 +68,7 @@ export const fetchReports = createAsyncThunk(
       
       return rejectWithValue(response.message || 'Failed to fetch reports');
     } catch (error: any) {
-      console.error('❌ Redux: Error fetching reports:', error.message);
+      console.log('❌ Redux: Error fetching reports:', error.message);
       return rejectWithValue(error.message || 'An error occurred while fetching reports');
     }
   }
@@ -91,7 +91,7 @@ export const fetchReportById = createAsyncThunk(
       
       return rejectWithValue(response.message || 'Failed to fetch report');
     } catch (error: any) {
-      console.error('❌ Redux: Error fetching report:', error.message);
+      console.log('❌ Redux: Error fetching report:', error.message);
       return rejectWithValue(error.message || 'An error occurred while fetching report');
     }
   }
@@ -130,8 +130,8 @@ const reportSlice = createSlice({
         state.lastFetch = Date.now();
       })
       .addCase(fetchReports.rejected, (state, action) => {
-        console.error('❌ fetchReports: rejected');
-        console.error('Error:', action.payload);
+        console.log('❌ fetchReports: rejected');
+        console.log('Error:', action.payload);
         state.isLoading = false;
         state.error = action.payload as string;
       });
@@ -149,8 +149,8 @@ const reportSlice = createSlice({
         state.selectedReport = action.payload;
       })
       .addCase(fetchReportById.rejected, (state, action) => {
-        console.error('❌ fetchReportById: rejected');
-        console.error('Error:', action.payload);
+        console.log('❌ fetchReportById: rejected');
+        console.log('Error:', action.payload);
         state.isLoading = false;
         state.error = action.payload as string;
       });

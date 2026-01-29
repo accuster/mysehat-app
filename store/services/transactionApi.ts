@@ -30,7 +30,7 @@ class TransactionApiService {
           config.headers.Authorization = `Bearer ${token}`;
           console.log('🔑 Transaction API: Token attached to request');
         } else {
-          console.warn('⚠️ Transaction API: No token found');
+          console.log('⚠️ Transaction API: No token found');
         }
         return config;
       },
@@ -65,7 +65,7 @@ class TransactionApiService {
               return this.api(originalRequest);
             }
           } catch (refreshError) {
-            console.error('❌ Transaction API: Token refresh failed');
+            console.log('❌ Transaction API: Token refresh failed');
             await storage.clearAuth();
             return Promise.reject(refreshError);
           }
@@ -86,7 +86,7 @@ class TransactionApiService {
       console.log('📥 API Response:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('❌ API Error (getAllTransactions):', error.message);
+      console.log('❌ API Error (getAllTransactions):', error.message);
       throw this.handleError(error);
     }
   }
@@ -101,7 +101,7 @@ class TransactionApiService {
       console.log('📥 API Response:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('❌ API Error (getTransactionById):', error.message);
+      console.log('❌ API Error (getTransactionById):', error.message);
       throw this.handleError(error);
     }
   }
@@ -115,7 +115,7 @@ class TransactionApiService {
       const message = error.response.data?.message || 'An error occurred';
       const status = error.response.status;
       
-      console.error('Server Error:', {
+      console.log('Server Error:', {
         status,
         message,
         data: error.response.data,
@@ -124,11 +124,11 @@ class TransactionApiService {
       return new Error(message);
     } else if (error.request) {
       // Request made but no response
-      console.error('No response from server:', error.request);
+      console.log('No response from server:', error.request);
       return new Error('No response from server. Please check your connection.');
     } else {
       // Something else happened
-      console.error('Request Error:', error.message);
+      console.log('Request Error:', error.message);
       return new Error(error.message || 'An unexpected error occurred');
     }
   }

@@ -1,6 +1,6 @@
 // components/common/AppDrawer.tsx
 import React from 'react';
-import { Text, StyleSheet, Alert } from 'react-native';
+import { Text, StyleSheet, Alert, Linking } from 'react-native';
 import { useDispatch } from 'react-redux';
 import { AppDispatch } from '../../store';
 import { logout } from '../../store/slices/authSlice';
@@ -12,7 +12,7 @@ const packageJson = require('../../package.json');
 
 import {
   FileText,
-  MessagesSquare ,
+  MessagesSquare,
   LogOut,
   ShieldCheck,
   ArrowLeftRight,
@@ -23,14 +23,13 @@ interface AppDrawerProps {
   open: boolean;
   onClose: () => void;
   navigation: any;
-  onOpenBrowser?: (title: string, url: string) => void;
+  // ✅ REMOVED: onOpenBrowser prop (no longer needed)
 }
 
 const AppDrawer: React.FC<AppDrawerProps> = ({
   open,
   onClose,
   navigation,
-  onOpenBrowser,
 }) => {
   const dispatch = useDispatch<AppDispatch>();
 
@@ -43,13 +42,28 @@ const AppDrawer: React.FC<AppDrawerProps> = ({
     }
   };
 
-  const handleBrowserOpen = (title: string, url: string) => {
+  // ✅ NEW: Open URL in external browser
+  const handleOpenURL = async (url: string, title: string) => {
     onClose();
-    setTimeout(() => {
-      if (onOpenBrowser) {
-        onOpenBrowser(title, url);
+    
+    try {
+      const supported = await Linking.canOpenURL(url);
+      
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert(
+          'Error',
+          `Cannot open ${title}. Please check your internet connection.`
+        );
       }
-    }, 200);
+    } catch (error) {
+      console.log('Error opening URL:', error);
+      Alert.alert(
+        'Error',
+        `Failed to open ${title}. Please try again later.`
+      );
+    }
   };
 
   const handleLogout = async () => {
@@ -76,7 +90,7 @@ const AppDrawer: React.FC<AppDrawerProps> = ({
               
               navigation.replace('Auth');
             } catch (error: any) {
-              console.error('❌ Logout error:', error);
+              console.log('❌ Logout error:', error);
               
               navigation.replace('Auth');
             }
@@ -107,53 +121,49 @@ const AppDrawer: React.FC<AppDrawerProps> = ({
     >
       <DrawerHeader onClose={onClose} />
 
-      {/* ✅ ADD PROFILE LINK */}
+      {/* My Profile */}
       <DrawerItem
         label="My Profile"
         icon={CircleUserRound}
         onPress={() => handleNavigation('Profile')}
       />
 
+      {/* Reports */}
       <DrawerItem
         label="Reports"
         icon={FileText}
         onPress={() => handleNavigation('Reports')}
       />
 
+      {/* Transactions */}
       <DrawerItem
         label="Transactions"
         icon={ArrowLeftRight}
         onPress={() => handleNavigation('Transactions')}
       />
 
+      {/* Support */}
       <DrawerItem
         label="Support"
-        icon={MessagesSquare }
+        icon={MessagesSquare}
         onPress={() => handleNavigation('Support')}
       />
 
-      {onOpenBrowser && (
-        <>
-          <DrawerItem
-            label="Privacy Policy"
-            icon={ShieldCheck}
-            onPress={() =>
-              handleBrowserOpen('Privacy Policy', 'https://mysehat.ai/privacy')
-            }
-          />
+      {/* ✅ Privacy Policy - Opens in external browser */}
+      <DrawerItem
+        label="Privacy Policy"
+        icon={ShieldCheck}
+        external // ✅ Show external link icon
+        onPress={() => handleOpenURL('https://mysehat.ai/privacy', 'Privacy Policy')}
+      />
 
-          <DrawerItem
-            label="Terms & Conditions"
-            icon={FileText}
-            onPress={() =>
-              handleBrowserOpen(
-                'Terms & Conditions',
-                'https://mysehat.ai/terms'
-              )
-            }
-          />
-        </>
-      )}
+      {/* ✅ Terms & Conditions - Opens in external browser */}
+      <DrawerItem
+        label="Terms & Conditions"
+        icon={FileText}
+        external // ✅ Show external link icon
+        onPress={() => handleOpenURL('https://mysehat.ai/terms', 'Terms & Conditions')}
+      />
     </Drawer>
   );
 };

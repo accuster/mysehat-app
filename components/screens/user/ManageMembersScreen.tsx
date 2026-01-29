@@ -99,7 +99,7 @@ export default function ManageMembersScreen({ navigation }: any) {
   // ✅ Safe navigation helper
   const handleBack = () => {
     if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting navigation');
+      console.log('⚠️ Component unmounted, aborting navigation');
       return;
     }
 
@@ -156,7 +156,7 @@ export default function ManageMembersScreen({ navigation }: any) {
 
     // ✅ Check if mounted before starting
     if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting add');
+      console.log('⚠️ Component unmounted, aborting add');
       return;
     }
 
@@ -173,7 +173,7 @@ export default function ManageMembersScreen({ navigation }: any) {
 
       // ✅ Check if still mounted after async
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted after member add');
+        console.log('⚠️ Component unmounted after member add');
         return;
       }
 
@@ -183,7 +183,7 @@ export default function ManageMembersScreen({ navigation }: any) {
       setShowAddForm(false);
       Alert.alert('Success', 'Family member added successfully!');
     } catch (err: any) {
-      console.error('❌ Add member error:', err);
+      console.log('❌ Add member error:', err);
 
       // ✅ Only show alert if mounted
       if (isMounted.current) {
@@ -208,7 +208,7 @@ export default function ManageMembersScreen({ navigation }: any) {
 
     // ✅ Check if mounted before starting
     if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting update');
+      console.log('⚠️ Component unmounted, aborting update');
       return;
     }
 
@@ -228,7 +228,7 @@ export default function ManageMembersScreen({ navigation }: any) {
 
       // ✅ Check if still mounted after async
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted after member update');
+        console.log('⚠️ Component unmounted after member update');
         return;
       }
 
@@ -239,7 +239,7 @@ export default function ManageMembersScreen({ navigation }: any) {
       dispatch(setSelectedMember(null));
       Alert.alert('Success', 'Family member updated successfully!');
     } catch (err: any) {
-      console.error('❌ Update member error:', err);
+      console.log('❌ Update member error:', err);
 
       // ✅ Only show alert if mounted
       if (isMounted.current) {
@@ -261,7 +261,7 @@ export default function ManageMembersScreen({ navigation }: any) {
           onPress: async () => {
             // ✅ Check if mounted before starting
             if (!isMounted.current) {
-              console.warn('⚠️ Component unmounted, aborting delete');
+              console.log('⚠️ Component unmounted, aborting delete');
               return;
             }
 
@@ -272,7 +272,7 @@ export default function ManageMembersScreen({ navigation }: any) {
 
               // ✅ Check if still mounted after async
               if (!isMounted.current) {
-                console.warn('⚠️ Component unmounted after member delete');
+                console.log('⚠️ Component unmounted after member delete');
                 return;
               }
 
@@ -280,7 +280,7 @@ export default function ManageMembersScreen({ navigation }: any) {
 
               Alert.alert('Success', 'Family member deleted successfully!');
             } catch (err: any) {
-              console.error('❌ Delete member error:', err);
+              console.log('❌ Delete member error:', err);
 
               // ✅ Only show alert if mounted
               if (isMounted.current) {

@@ -38,7 +38,7 @@ class OrderApiService {
           config.headers.Authorization = `Bearer ${token}`;
           console.log('🔑 Order API: Token attached to request');
         } else {
-          console.warn('⚠️ Order API: No token found');
+          console.log('⚠️ Order API: No token found');
         }
         return config;
       },
@@ -73,7 +73,7 @@ class OrderApiService {
               return this.api(originalRequest);
             }
           } catch (refreshError) {
-            console.error('❌ Order API: Token refresh failed');
+            console.log('❌ Order API: Token refresh failed');
             await storage.clearAuth();
             return Promise.reject(refreshError);
           }
@@ -107,10 +107,10 @@ class OrderApiService {
       
       return response.data;
     } catch (error: any) {
-      console.error('❌ API Error (createOrder):', error.message);
+      console.log('❌ API Error (createOrder):', error.message);
       
       if (error.response) {
-        console.error('Server Error:', {
+        console.log('Server Error:', {
           status: error.response.status,
           message: error.response.data?.message,
           data: error.response.data,
@@ -135,7 +135,7 @@ class OrderApiService {
       
       return response.data;
     } catch (error: any) {
-      console.error('❌ API Error (getOrderById):', error.message);
+      console.log('❌ API Error (getOrderById):', error.message);
       throw this.handleError(error);
     }
   }
@@ -155,7 +155,7 @@ class OrderApiService {
       
       return response.data;
     } catch (error: any) {
-      console.error('❌ API Error (getUserOrders):', error.message);
+      console.log('❌ API Error (getUserOrders):', error.message);
       throw this.handleError(error);
     }
   }
@@ -177,7 +177,7 @@ class OrderApiService {
       
       return response.data;
     } catch (error: any) {
-      console.error('❌ API Error (updateOrderUser):', error.message);
+      console.log('❌ API Error (updateOrderUser):', error.message);
       throw this.handleError(error);
     }
   }
@@ -193,7 +193,7 @@ class OrderApiService {
                      'An error occurred';
       const status = error.response.status;
       
-      console.error('Server Error:', {
+      console.log('Server Error:', {
         status,
         message,
         data: error.response.data,
@@ -202,11 +202,11 @@ class OrderApiService {
       return new Error(message);
     } else if (error.request) {
       // Request made but no response
-      console.error('No response from server:', error.request);
+      console.log('No response from server:', error.request);
       return new Error('No response from server. Please check your connection.');
     } else {
       // Something else happened
-      console.error('Request Error:', error.message);
+      console.log('Request Error:', error.message);
       return new Error(error.message || 'An unexpected error occurred');
     }
   }

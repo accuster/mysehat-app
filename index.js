@@ -30,7 +30,7 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
     if (pdfPath) {
       await openPdfFile(pdfPath);
     } else {
-      console.warn('⚠️ No PDF path in notification data');
+      console.log('⚠️ No PDF path in notification data');
     }
   }
 });

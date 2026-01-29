@@ -165,7 +165,7 @@ export default function WalletScreen({ navigation }: Props) {
       isMounted.current = false;
       
       if (isProcessing) {
-        console.warn('⚠️ Component unmounted during payment processing');
+        console.log('⚠️ Component unmounted during payment processing');
       }
     };
   }, []);
@@ -217,7 +217,7 @@ export default function WalletScreen({ navigation }: Props) {
   // ✅ Helper function for actual navigation
   const performNavigation = () => {
     if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting navigation');
+      console.log('⚠️ Component unmounted, aborting navigation');
       return;
     }
     
@@ -227,7 +227,7 @@ export default function WalletScreen({ navigation }: Props) {
         navigation.goBack();
       }
     } catch (error) {
-      console.error('❌ Navigation error:', error);
+      console.log('❌ Navigation error:', error);
     }
   };
 
@@ -243,7 +243,7 @@ export default function WalletScreen({ navigation }: Props) {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     
     if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting navigation');
+      console.log('⚠️ Component unmounted, aborting navigation');
       return;
     }
     
@@ -328,7 +328,7 @@ export default function WalletScreen({ navigation }: Props) {
     try {
       // ✅ Check if mounted
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted, aborting payment');
+        console.log('⚠️ Component unmounted, aborting payment');
         return;
       }
       
@@ -364,7 +364,7 @@ export default function WalletScreen({ navigation }: Props) {
       
       // ✅ Check if still mounted after async operation
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted after payment initiation');
+        console.log('⚠️ Component unmounted after payment initiation');
         return;
       }
       
@@ -382,7 +382,7 @@ export default function WalletScreen({ navigation }: Props) {
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       
     } catch (error: any) {
-      console.error('❌ Payment error:', error);
+      console.log('❌ Payment error:', error);
       
       // ✅ Only show alert if mounted
       if (isMounted.current) {

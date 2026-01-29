@@ -20,7 +20,7 @@ export default function SplashScreen({ navigation }: Props) {
     const timer = setTimeout(() => {
       // ✅ Check if mounted before navigation
       if (!isMounted.current) {
-        console.warn('⚠️ SplashScreen unmounted before navigation');
+        console.log('⚠️ SplashScreen unmounted before navigation');
         return;
       }
       

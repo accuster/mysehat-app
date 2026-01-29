@@ -18,7 +18,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
     const settings = await notifee.requestPermission();
     return settings.authorizationStatus >= 1;
   } catch (error) {
-    console.error('Notification permission error:', error);
+    console.log('Notification permission error:', error);
     return false;
   }
 }
@@ -38,7 +38,7 @@ export async function createNotificationChannel(): Promise<void> {
     });
     console.log('✅ Notification channel created successfully');
   } catch (error) {
-    console.error('❌ Failed to create notification channel:', error);
+    console.log('❌ Failed to create notification channel:', error);
   }
 }
 
@@ -52,7 +52,7 @@ async function openPdfFile(pdfPath: string): Promise<void> {
     // Check if file exists
     const fileExists = await RNFS.exists(pdfPath);
     if (!fileExists) {
-      console.error('❌ PDF file not found:', pdfPath);
+      console.log('❌ PDF file not found:', pdfPath);
       Alert.alert(
         'File Not Found',
         'The PDF file could not be found. It may have been moved or deleted.',
@@ -78,7 +78,7 @@ async function openPdfFile(pdfPath: string): Promise<void> {
         
         console.log('✅ PDF opened successfully with Intent');
       } catch (intentError) {
-        console.error('❌ Intent method failed:', intentError);
+        console.log('❌ Intent method failed:', intentError);
         
         // ✅ FALLBACK: Show user instructions to open manually
         const fileName = pdfPath.split('/').pop() || 'report.pdf';
@@ -106,7 +106,7 @@ async function openPdfFile(pdfPath: string): Promise<void> {
       await Linking.openURL(fileUrl);
     }
   } catch (error: any) {
-    console.error('❌ Error opening PDF:', error);
+    console.log('❌ Error opening PDF:', error);
     const fileName = pdfPath.split('/').pop() || 'report.pdf';
     Alert.alert(
       'Cannot Open PDF',
@@ -133,7 +133,7 @@ export function setupNotificationHandlers(): void {
         console.log('📱 User tapped notification, opening PDF:', pdfPath);
         await openPdfFile(pdfPath);
       } else {
-        console.warn('⚠️ No PDF path in notification data');
+        console.log('⚠️ No PDF path in notification data');
       }
     }
   });
@@ -171,7 +171,7 @@ export async function showDownloadNotification(pdfPath: string): Promise<void> {
     // ✅ Request permission first
     const hasPermission = await requestNotificationPermission();
     if (!hasPermission) {
-      console.warn('⚠️ Notification permission denied');
+      console.log('⚠️ Notification permission denied');
       return;
     }
 
@@ -204,7 +204,7 @@ export async function showDownloadNotification(pdfPath: string): Promise<void> {
     console.log('✅ Notification displayed with ID:', notificationId);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   } catch (error) {
-    console.error('❌ Failed to show notification:', error);
+    console.log('❌ Failed to show notification:', error);
   }
 }
 
@@ -216,6 +216,6 @@ export async function cancelAllNotifications(): Promise<void> {
     await notifee.cancelAllNotifications();
     console.log('✅ All notifications cancelled');
   } catch (error) {
-    console.error('❌ Failed to cancel notifications:', error);
+    console.log('❌ Failed to cancel notifications:', error);
   }
 }

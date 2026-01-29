@@ -382,7 +382,7 @@ export async function generateReportPdf(data: ReportData): Promise<string> {
     
     return finalPath;
   } catch (error: any) {
-    console.error('PDF Generation Error:', error);
+    console.log('PDF Generation Error:', error);
     throw new Error(error.message || 'Failed to generate PDF');
   }
 }
@@ -419,7 +419,7 @@ export async function openPdf(filePath: string): Promise<void> {
       }
     }
   } catch (error: any) {
-    console.error('Open PDF error:', error);
+    console.log('Open PDF error:', error);
     Alert.alert(
       'Cannot Open PDF',
       'The file was saved but could not be opened automatically. Please use your File Manager to open the PDF from the Downloads folder.'
@@ -441,7 +441,7 @@ export async function shareReportPdf(filePath: string): Promise<void> {
     // ✅ Check if file exists
     const fileExists = await RNFS.exists(filePath);
     if (!fileExists) {
-      console.error('❌ PDF file not found at:', filePath);
+      console.log('❌ PDF file not found at:', filePath);
       throw new Error('PDF file not found');
     }
 
@@ -464,7 +464,7 @@ export async function shareReportPdf(filePath: string): Promise<void> {
         console.log('✅ SendIntent share dialog opened successfully');
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       } catch (sendIntentError: any) {
-        console.error('❌ SendIntent failed:', sendIntentError);
+        console.log('❌ SendIntent failed:', sendIntentError);
         
         // ✅ FALLBACK: Try using file:// URL with Share API
         console.log('⚠️ Attempting fallback method...');
@@ -494,11 +494,11 @@ export async function shareReportPdf(filePath: string): Promise<void> {
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     }
   } catch (error: any) {
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('❌ shareReportPdf: FAILED');
-    console.error('Error message:', error.message);
-    console.error('Error stack:', error.stack);
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('❌ shareReportPdf: FAILED');
+    console.log('Error message:', error.message);
+    console.log('Error stack:', error.stack);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     
     throw new Error('Failed to share report: ' + error.message);
   }

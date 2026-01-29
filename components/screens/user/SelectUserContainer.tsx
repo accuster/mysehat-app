@@ -52,10 +52,10 @@ export default function SelectUserContainer({ navigation, route }: Props) {
       
       // Cancel any pending operations
       if (isSaving) {
-        console.warn('⚠️ Component unmounted during save operation');
+        console.log('⚠️ Component unmounted during save operation');
       }
       if (isUpdatingOrder) {
-        console.warn('⚠️ Component unmounted during order update');
+        console.log('⚠️ Component unmounted during order update');
       }
     };
   }, [dispatch]);
@@ -89,7 +89,7 @@ export default function SelectUserContainer({ navigation, route }: Props) {
         navigation.goBack();
       }
     } catch (error) {
-      console.error('❌ Navigation error:', error);
+      console.log('❌ Navigation error:', error);
     }
   };
 
@@ -105,7 +105,7 @@ export default function SelectUserContainer({ navigation, route }: Props) {
     
     // ✅ Check if still mounted
     if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting save');
+      console.log('⚠️ Component unmounted, aborting save');
       return;
     }
     
@@ -116,7 +116,7 @@ export default function SelectUserContainer({ navigation, route }: Props) {
       
       // ✅ Check before state updates
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted after create, skipping updates');
+        console.log('⚠️ Component unmounted after create, skipping updates');
         return;
       }
       
@@ -131,7 +131,7 @@ export default function SelectUserContainer({ navigation, route }: Props) {
         setShowAddModal(false);
       }
     } catch (error: any) {
-      console.error('❌ Failed to add member:', error);
+      console.log('❌ Failed to add member:', error);
       
       // ✅ Only show alert if mounted
       if (isMounted.current) {
@@ -148,7 +148,7 @@ export default function SelectUserContainer({ navigation, route }: Props) {
 
   const handleContinue = async () => {
     if (selectedIndex === null || !formattedMembers || formattedMembers.length === 0) {
-      console.warn('⚠️ No member selected or members array is empty');
+      console.log('⚠️ No member selected or members array is empty');
       return;
     }
 
@@ -156,7 +156,7 @@ export default function SelectUserContainer({ navigation, route }: Props) {
     const originalMember = reduxMembers[selectedIndex];
 
     if (!selectedMember || !originalMember) {
-      console.error('❌ Selected member not found');
+      console.log('❌ Selected member not found');
       return;
     }
 
@@ -168,7 +168,7 @@ export default function SelectUserContainer({ navigation, route }: Props) {
     if (orderId) {
       // ✅ Check if mounted before starting
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted, aborting order update');
+        console.log('⚠️ Component unmounted, aborting order update');
         return;
       }
       
@@ -183,13 +183,13 @@ export default function SelectUserContainer({ navigation, route }: Props) {
         
         // ✅ Check if still mounted after async operation
         if (!isMounted.current) {
-          console.warn('⚠️ Component unmounted after order update, skipping navigation');
+          console.log('⚠️ Component unmounted after order update, skipping navigation');
           return;
         }
         
         console.log('✅ Order updated successfully!');
       } catch (error: any) {
-        console.error('❌ Failed to update order:', error);
+        console.log('❌ Failed to update order:', error);
         
         // ✅ Only show alert if mounted
         if (isMounted.current) {
@@ -204,12 +204,12 @@ export default function SelectUserContainer({ navigation, route }: Props) {
         }
       }
     } else {
-      console.warn('⚠️ No orderId provided, skipping order update');
+      console.log('⚠️ No orderId provided, skipping order update');
     }
 
     // ✅ Final mounted check before navigation
     if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, skipping navigation to Pay screen');
+      console.log('⚠️ Component unmounted, skipping navigation to Pay screen');
       return;
     }
 
@@ -230,7 +230,7 @@ export default function SelectUserContainer({ navigation, route }: Props) {
         orderId: orderId,
       });
     } catch (error) {
-      console.error('❌ Navigation error:', error);
+      console.log('❌ Navigation error:', error);
       
       if (isMounted.current) {
         Alert.alert('Error', 'Navigation failed. Please try again.');

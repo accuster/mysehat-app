@@ -1,6 +1,6 @@
 // utils/notificationService.ts - FIXED VERSION
 import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
-import { Platform, Linking, Alert } from 'react-native';
+import { Platform, Alert } from 'react-native';
 import RNFS from 'react-native-fs';
 
 /**
@@ -15,7 +15,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
     const settings = await notifee.requestPermission();
     return settings.authorizationStatus >= 1;
   } catch (error) {
-    console.error('Notification permission error:', error);
+    console.log('Notification permission error:', error);
     return false;
   }
 }
@@ -35,7 +35,7 @@ export async function createNotificationChannel(): Promise<void> {
     });
     console.log('✅ Notification channel created successfully');
   } catch (error) {
-    console.error('❌ Failed to create notification channel:', error);
+    console.log('❌ Failed to create notification channel:', error);
   }
 }
 
@@ -54,7 +54,7 @@ export async function openPdfFile(pdfPath: string) {
     console.log('File exists:', exists);
     
     if (!exists) {
-      console.error('❌ PDF file not found at:', pdfPath);
+      console.log('❌ PDF file not found at:', pdfPath);
       Alert.alert('File Not Found', 'PDF does not exist at the specified location.');
       return;
     }
@@ -77,11 +77,11 @@ export async function openPdfFile(pdfPath: string) {
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     }
   } catch (error: any) {
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('❌ Failed to open PDF');
-    console.error('Error:', error);
-    console.error('Error message:', error.message);
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('❌ Failed to open PDF');
+    console.log('Error:', error);
+    console.log('Error message:', error.message);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     const fileName = pdfPath.split('/').pop() || 'report.pdf';
     Alert.alert(
@@ -136,7 +136,7 @@ export function setupNotificationHandlers(): void {
           console.log('🚀 Calling openPdfFile...');
           await openPdfFile(pdfPath);
         } else {
-          console.warn('⚠️ No PDF path in notification data');
+          console.log('⚠️ No PDF path in notification data');
           Alert.alert('Error', 'Cannot open PDF - file path not found.');
         }
       } else {
@@ -150,7 +150,7 @@ export function setupNotificationHandlers(): void {
     console.log('✅ Foreground notification handler registered successfully');
     console.log('Unsubscribe function:', typeof unsubscribe);
   } catch (error) {
-    console.error('❌ Error setting up foreground handler:', error);
+    console.log('❌ Error setting up foreground handler:', error);
   }
 
   console.log('ℹ️ Background handler should be registered in index.js');
@@ -171,7 +171,7 @@ export async function showDownloadNotification(pdfPath: string): Promise<void> {
     // ✅ Request permission first
     const hasPermission = await requestNotificationPermission();
     if (!hasPermission) {
-      console.warn('⚠️ Notification permission denied');
+      console.log('⚠️ Notification permission denied');
       return;
     }
 
@@ -184,7 +184,7 @@ export async function showDownloadNotification(pdfPath: string): Promise<void> {
     console.log('File exists before notification:', fileExists);
     
     if (!fileExists) {
-      console.error('❌ Cannot show notification - file does not exist');
+      console.log('❌ Cannot show notification - file does not exist');
       return;
     }
 
@@ -196,7 +196,7 @@ export async function showDownloadNotification(pdfPath: string): Promise<void> {
       await openPdfFile(pdfPath);
       console.log('✅ PDF opened successfully');
     } catch (openError) {
-      console.error('⚠️ Could not auto-open PDF:', openError);
+      console.log('⚠️ Could not auto-open PDF:', openError);
       // Continue to show notification as fallback
     }
 
@@ -219,10 +219,10 @@ export async function showDownloadNotification(pdfPath: string): Promise<void> {
     console.log('✅ Notification displayed with ID:', notificationId);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   } catch (error) {
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('❌ Failed to show notification');
-    console.error('Error:', error);
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('❌ Failed to show notification');
+    console.log('Error:', error);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   }
 }
 
@@ -234,6 +234,6 @@ export async function cancelAllNotifications(): Promise<void> {
     await notifee.cancelAllNotifications();
     console.log('✅ All notifications cancelled');
   } catch (error) {
-    console.error('❌ Failed to cancel notifications:', error);
+    console.log('❌ Failed to cancel notifications:', error);
   }
 }

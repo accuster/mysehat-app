@@ -88,7 +88,7 @@ export default function SupportView({
       isMounted.current = false;
       
       if (submitting || timelineLoadingId) {
-        console.warn('⚠️ Component unmounted during async operation');
+        console.log('⚠️ Component unmounted during async operation');
       }
     };
   }, []);
@@ -127,7 +127,7 @@ export default function SupportView({
 
   const submit = async () => {
     if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting submit');
+      console.log('⚠️ Component unmounted, aborting submit');
       return;
     }
     
@@ -150,7 +150,7 @@ export default function SupportView({
       });
       
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted after ticket submission');
+        console.log('⚠️ Component unmounted after ticket submission');
         return;
       }
       
@@ -167,7 +167,7 @@ export default function SupportView({
       setShowCategoryDropdown(false);
     } catch (err) {
       // ✅ FIX: Use different variable name to avoid ESLint warning
-      console.error('❌ Submit error:', err);
+      console.log('❌ Submit error:', err);
       
       if (isMounted.current) {
         setError('Failed to submit ticket. Please try again.');
@@ -181,7 +181,7 @@ export default function SupportView({
 
   const toggleTimeline = async (ticketId: string) => {
     if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting timeline toggle');
+      console.log('⚠️ Component unmounted, aborting timeline toggle');
       return;
     }
     
@@ -202,7 +202,7 @@ export default function SupportView({
       const res = await onFetchTimeline(ticketId);
       
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted after timeline fetch');
+        console.log('⚠️ Component unmounted after timeline fetch');
         return;
       }
       
@@ -218,7 +218,7 @@ export default function SupportView({
       setTimelineLoadingId(null);
     } catch (err) {
       // ✅ FIX: Use different variable name to avoid ESLint warning
-      console.error('❌ Timeline fetch error:', err);
+      console.log('❌ Timeline fetch error:', err);
       
       if (isMounted.current) {
         setTimelineErrorById(p => ({ ...p, [ticketId]: 'Failed to load timeline' }));

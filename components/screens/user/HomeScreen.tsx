@@ -125,14 +125,14 @@ export default function HomeScreen({ navigation }: Props) {
   // ✅ Safe navigation helper
   const handleNavigation = (screen: string) => {
     if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting navigation');
+      console.log('⚠️ Component unmounted, aborting navigation');
       return;
     }
     
     try {
       navigation.navigate(screen);
     } catch (error) {
-      console.error('❌ Navigation error:', error);
+      console.log('❌ Navigation error:', error);
     }
   };
 

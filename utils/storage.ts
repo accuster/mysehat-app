@@ -13,7 +13,7 @@ export const storage = {
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, token);
     } catch (error) {
-      console.error('Error saving token:', error);
+      console.log('Error saving token:', error);
     }
   },
 
@@ -22,7 +22,7 @@ export const storage = {
     try {
       return await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
     } catch (error) {
-      console.error('Error getting token:', error);
+      console.log('Error getting token:', error);
       return null;
     }
   },
@@ -32,7 +32,7 @@ export const storage = {
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
     } catch (error) {
-      console.error('Error saving refresh token:', error);
+      console.log('Error saving refresh token:', error);
     }
   },
 
@@ -41,7 +41,7 @@ export const storage = {
     try {
       return await AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
     } catch (error) {
-      console.error('Error getting refresh token:', error);
+      console.log('Error getting refresh token:', error);
       return null;
     }
   },
@@ -51,7 +51,7 @@ export const storage = {
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
     } catch (error) {
-      console.error('Error saving user:', error);
+      console.log('Error saving user:', error);
     }
   },
 
@@ -61,7 +61,7 @@ export const storage = {
       const user = await AsyncStorage.getItem(STORAGE_KEYS.USER);
       return user ? JSON.parse(user) : null;
     } catch (error) {
-      console.error('Error getting user:', error);
+      console.log('Error getting user:', error);
       return null;
     }
   },
@@ -75,7 +75,7 @@ export const storage = {
         STORAGE_KEYS.USER,
       ]);
     } catch (error) {
-      console.error('Error clearing auth:', error);
+      console.log('Error clearing auth:', error);
     }
   },
 };

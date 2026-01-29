@@ -82,28 +82,28 @@ export const verifyLogin = createAsyncThunk(
         };
       }
 
-      console.error('❌ Redux: Response not successful');
+      console.log('❌ Redux: Response not successful');
       return rejectWithValue(response.message || 'Login failed');
     } catch (error: any) {
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.error('❌ Redux: Error in verifyLogin');
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.error('Error type:', typeof error);
-      console.error('Error message:', error.message);
-      console.error('Error name:', error.name);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('❌ Redux: Error in verifyLogin');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('Error type:', typeof error);
+      console.log('Error message:', error.message);
+      console.log('Error name:', error.name);
 
       // Log full error details
       if (error.response) {
-        console.error('Response status:', error.response.status);
-        console.error(
+        console.log('Response status:', error.response.status);
+        console.log(
           'Response data:',
           JSON.stringify(error.response.data, null, 2),
         );
       } else if (error.request) {
-        console.error('No response received from server');
-        console.error('Request:', error.request);
+        console.log('No response received from server');
+        console.log('Request:', error.request);
       } else {
-        console.error('Error setting up request:', error.message);
+        console.log('Error setting up request:', error.message);
       }
 
       // Return the actual error message from backend
@@ -141,7 +141,7 @@ export const completeProfile = createAsyncThunk(
 
       return rejectWithValue(response.message);
     } catch (error: any) {
-      console.error('❌ Error completing profile:', error.message);
+      console.log('❌ Error completing profile:', error.message);
       return rejectWithValue(error.message);
     }
   },
@@ -169,7 +169,7 @@ export const loadUserFromStorage = createAsyncThunk(
       console.log('ℹ️ No stored auth data found');
       return rejectWithValue('No stored auth data');
     } catch (error: any) {
-      console.error('❌ Error loading from storage:', error.message);
+      console.log('❌ Error loading from storage:', error.message);
       return rejectWithValue(error.message);
     }
   },
@@ -214,10 +214,10 @@ export const logout = createAsyncThunk(
       
       return null;
     } catch (error: any) {
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.error('⚠️ LOGOUT ERROR - FORCING CLEANUP');
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.error('Error:', error.message);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('⚠️ LOGOUT ERROR - FORCING CLEANUP');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('Error:', error.message);
       
       // Even if API fails, force clear everything
       try {
@@ -227,10 +227,10 @@ export const logout = createAsyncThunk(
         await persistor.purge();
         console.log('✅ Forced cleanup completed');
       } catch (cleanupError: any) {
-        console.error('❌ Cleanup error:', cleanupError.message);
+        console.log('❌ Cleanup error:', cleanupError.message);
       }
       
-      console.warn('⚠️ Logout API failed but local data cleared');
+      console.log('⚠️ Logout API failed but local data cleared');
       return rejectWithValue(error.message);
     }
   },
@@ -279,8 +279,8 @@ const authSlice = createSlice({
         state.otpSent = false;
       })
       .addCase(verifyLogin.rejected, (state, action) => {
-        console.error('❌ verifyLogin: rejected');
-        console.error('Error:', action.payload);
+        console.log('❌ verifyLogin: rejected');
+        console.log('Error:', action.payload);
         state.isLoading = false;
         state.error = action.payload as string;
       });

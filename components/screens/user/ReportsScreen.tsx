@@ -109,7 +109,7 @@ export default function ReportsScreen({ navigation }: Props) {
       
       // Check if mounted
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted, aborting navigation');
+        console.log('⚠️ Component unmounted, aborting navigation');
         return false;
       }
       

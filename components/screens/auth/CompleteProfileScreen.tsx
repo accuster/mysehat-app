@@ -55,7 +55,7 @@ export default function CompleteProfileScreen({ navigation }: Props) {
       isMounted.current = false;
       
       if (isLoading) {
-        console.warn('⚠️ Component unmounted during profile completion');
+        console.log('⚠️ Component unmounted during profile completion');
       }
     };
   }, []);
@@ -114,7 +114,7 @@ export default function CompleteProfileScreen({ navigation }: Props) {
   const handleSubmit = async () => {
     // ✅ Check if mounted
     if (!isMounted.current) {
-      console.warn('⚠️ Component unmounted, aborting submit');
+      console.log('⚠️ Component unmounted, aborting submit');
       return;
     }
     
@@ -158,7 +158,7 @@ export default function CompleteProfileScreen({ navigation }: Props) {
 
       // ✅ Check if still mounted after async
       if (!isMounted.current) {
-        console.warn('⚠️ Component unmounted after profile completion');
+        console.log('⚠️ Component unmounted after profile completion');
         return;
       }
 
@@ -183,7 +183,7 @@ export default function CompleteProfileScreen({ navigation }: Props) {
         throw new Error('Failed to complete profile');
       }
     } catch (err: any) {
-      console.error('❌ Profile completion error:', err);
+      console.log('❌ Profile completion error:', err);
       
       // ✅ Only show alert if mounted
       if (isMounted.current) {

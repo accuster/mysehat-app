@@ -1,22 +1,30 @@
 // components/common/drawer/DrawerItem.tsx
 import React from "react";
-import { Pressable, Text, StyleSheet } from "react-native";
-import { LucideIcon } from "lucide-react-native";
+import { Pressable, Text, StyleSheet, View } from "react-native";
+import { LucideIcon, ExternalLink } from "lucide-react-native";
 
 type Props = {
   label: string;
   icon: LucideIcon;
   onPress: () => void;
   danger?: boolean;
+  external?: boolean; // ✅ NEW: Show external link icon
 };
 
-export default function DrawerItem({ label, icon: Icon, onPress, danger }: Props) {
+export default function DrawerItem({ label, icon: Icon, onPress, danger, external }: Props) {
   return (
     <Pressable style={styles.row} onPress={onPress}>
-      <Icon size={18} color={danger ? "#EF4444" : "#CBD5E1"} />
-      <Text style={[styles.text, danger && styles.danger]}>
-        {label}
-      </Text>
+      <View style={styles.leftContent}>
+        <Icon size={18} color={danger ? "#EF4444" : "#CBD5E1"} />
+        <Text style={[styles.text, danger && styles.danger]}>
+          {label}
+        </Text>
+      </View>
+      
+      {/* ✅ Show external link icon if external prop is true */}
+      {external && (
+        <ExternalLink size={16} color="#64748B" />
+      )}
     </Pressable>
   );
 }
@@ -27,7 +35,13 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between", // ✅ Push external icon to the right
+  },
+  leftContent: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
+    flex: 1, // ✅ Take remaining space
   },
   text: {
     color: "#CBD5E1",

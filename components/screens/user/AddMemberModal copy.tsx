@@ -79,7 +79,7 @@ export default function AddMemberModal({ visible, onClose, onSave, isLoading }: 
       onClose();
     } catch (error: any) {
       // Error already shown by parent
-      console.error('Save error:', error);
+      console.log('Save error:', error);
     }
   };
 
