@@ -253,16 +253,12 @@ function generateHTMLTemplate(data: ReportData): string {
     <div class="section">
       <div class="section-label">Patient Information</div>
       <div class="patient-name">${data.patientName}</div>
-      <div class="patient-meta">${data.age} years / ${formatGender(
-    data.gender,
-  )}</div>
+      <div class="patient-meta">${data.age} years / ${formatGender(data.gender)}</div>
       
       <div class="badges">
         <span class="badge">BMI: ${data.bmi}</span>
         <span class="badge">${data.bmiStatus}</span>
-        <span class="score">Health Score: <span class="score-value">${
-          data.healthScore
-        }/100</span></span>
+        <span class="score">Health Score: <span class="score-value">${data.healthScore}/100</span></span>
       </div>
     </div>
     
@@ -332,47 +328,65 @@ function generateHTMLTemplate(data: ReportData): string {
  */
 export async function generateReportPdf(data: ReportData): Promise<string> {
   try {
+    console.log('Starting PDF generation...');
+
+    // ✅ Generate HTML content
     const htmlContent = generateHTMLTemplate(data);
+
+    // ✅ Generate unique filename (without .pdf extension, library adds it)
     const timestamp = Date.now();
     const fileName = `MySehat_Report_${data.reportId}_${timestamp}`;
+    const finalFileName = `${fileName}.pdf`;
 
-    // ✅ PRODUCTION FIX: Use ExternalDirectoryPath instead of DownloadDirectoryPath
-    // This path is: /storage/emulated/0/Android/data/your.package.name/files
-    // It requires ZERO permissions on ALL Android versions (even below 12).
-    const safePath =
-      Platform.OS === 'android'
-        ? RNFS.ExternalDirectoryPath
-        : RNFS.DocumentDirectoryPath;
-
+    // ✅ Generate PDF in temp location first
     const options = {
       html: htmlContent,
       fileName: fileName,
-      directory: 'Documents',
+      directory: 'Documents', // Temp location
       base64: false,
     };
 
+    console.log('Generating PDF with options:', fileName);
+
+    // ✅ Generate PDF
     const result = await generatePDF(options);
-
-    if (!result.filePath) throw new Error('PDF path returned null');
-
-    // ✅ MOVE file to the safe directory
-    const finalPath = `${safePath}/${fileName}.pdf`;
-
-    // Check if directory exists
-    const dirExists = await RNFS.exists(safePath);
-    if (!dirExists) {
-      await RNFS.mkdir(safePath);
+    
+    console.log('PDF generated successfully at temp location:', result.filePath);
+    
+    if (!result.filePath) {
+      throw new Error('Failed to generate PDF - no file path returned');
     }
 
-    await RNFS.moveFile(result.filePath, finalPath);
+    // ✅ Copy to PUBLIC Downloads folder
+    const publicDownloadsPath = RNFS.DownloadDirectoryPath;
+    const finalPath = `${publicDownloadsPath}/${finalFileName}`;
 
-    console.log('✅ PDF saved to safe production path:', finalPath);
+    console.log('Copying PDF to public Downloads folder...');
+    console.log('From:', result.filePath);
+    console.log('To:', finalPath);
+
+    // Copy file to public Downloads
+    await RNFS.copyFile(result.filePath, finalPath);
+
+    console.log('✅ PDF copied to public Downloads successfully!');
+
+    // Delete temp file
+    try {
+      await RNFS.unlink(result.filePath);
+      console.log('Temp file deleted');
+    } catch (e) {
+      console.log('Could not delete temp file:', e);
+    }
+
+    console.log('Final PDF path:', finalPath);
+    
     return finalPath;
   } catch (error: any) {
     console.log('PDF Generation Error:', error);
     throw new Error(error.message || 'Failed to generate PDF');
   }
 }
+
 
 /**
  * ✅ FIXED: Share PDF using FileProvider (Google Play compliant)
@@ -384,7 +398,7 @@ export async function shareReportPdf(filePath: string): Promise<void> {
     console.log('📤 shareReportPdf: Starting...');
     console.log('File path:', filePath);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
+    
     // ✅ Check if file exists
     const fileExists = await RNFS.exists(filePath);
     if (!fileExists) {
@@ -397,7 +411,7 @@ export async function shareReportPdf(filePath: string): Promise<void> {
     if (Platform.OS === 'android') {
       // ✅ ANDROID: Use SendIntent for proper FileProvider sharing
       console.log('📱 Android detected - using SendIntent');
-
+      
       try {
         await SendIntentAndroid.openFileChooser(
           {
@@ -405,38 +419,38 @@ export async function shareReportPdf(filePath: string): Promise<void> {
             fileUrl: filePath,
             type: 'application/pdf',
           },
-          'Share Health Report',
+          'Share Health Report'
         );
-
+        
         console.log('✅ SendIntent share dialog opened successfully');
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       } catch (sendIntentError: any) {
         console.log('❌ SendIntent failed:', sendIntentError);
-
+        
         // ✅ FALLBACK: Try using file:// URL with Share API
         console.log('⚠️ Attempting fallback method...');
-
+        
         const fileUrl = `file://${filePath}`;
         console.log('File URL:', fileUrl);
-
+        
         await Share.share({
           title: 'Share MySehat Health Report',
           message: 'Here is my health report from MySehat',
           url: fileUrl,
         });
-
+        
         console.log('✅ Fallback share completed');
       }
     } else {
       // ✅ iOS: Use file:// URL
       console.log('📱 iOS detected - using Share.share');
-
+      
       await Share.share({
         title: 'Share MySehat Health Report',
         message: 'Here is my health report from MySehat',
         url: `file://${filePath}`,
       });
-
+      
       console.log('✅ iOS share completed');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     }
@@ -446,7 +460,7 @@ export async function shareReportPdf(filePath: string): Promise<void> {
     console.log('Error message:', error.message);
     console.log('Error stack:', error.stack);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
+    
     throw new Error('Failed to share report: ' + error.message);
   }
 }

@@ -1,15 +1,24 @@
 // components/screens/user/HomeScreen.tsx
 /* eslint-disable react-native/no-inline-styles */
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, BackHandler } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  BackHandler,
+} from 'react-native';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../store';
 
 import AppHeader from '../../common/AppHeader';
 import AppDrawer from '../../common/AppDrawer';
-import InAppBrowser from '../../common/InAppBrowser';
 
 import {
   FileText,
@@ -26,28 +35,26 @@ type Props = {
 
 export default function HomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  
+
   // ✅ Add isMounted ref
   const isMounted = useRef(true);
-  
+
   const { members } = useSelector((state: RootState) => state.members);
   const { user } = useSelector((state: RootState) => state.auth);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [browserOpen, setBrowserOpen] = useState(false);
-  const [browserUrl, setBrowserUrl] = useState('');
-  const [browserTitle, setBrowserTitle] = useState('');
 
   // ✅ FIXED: Setup and cleanup (no dependencies to prevent re-runs)
   useEffect(() => {
     isMounted.current = true;
-    
+
     console.log('🏠 HomeScreen: Component mounted');
 
     return () => {
       console.log('🧹 HomeScreen: Unmounting...');
       isMounted.current = false;
-      
+
       // React will handle cleanup automatically
       // No need to warn about open modals
     };
@@ -57,7 +64,7 @@ export default function HomeScreen({ navigation }: Props) {
   useEffect(() => {
     const backAction = () => {
       console.log('⬅️ HARDWARE BACK: HomeScreen');
-      
+
       // ✅ Priority 1: Close browser if open
       if (browserOpen) {
         console.log('📱 Closing browser');
@@ -66,7 +73,7 @@ export default function HomeScreen({ navigation }: Props) {
         }
         return true; // Prevent default back
       }
-      
+
       // ✅ Priority 2: Close drawer if open
       if (drawerOpen) {
         console.log('🗂️ Closing drawer');
@@ -75,7 +82,7 @@ export default function HomeScreen({ navigation }: Props) {
         }
         return true; // Prevent default back
       }
-      
+
       // ✅ Priority 3: Allow default back (exit app or go to previous screen)
       console.log('⬅️ Default back action');
       return false; // Allow default
@@ -83,20 +90,11 @@ export default function HomeScreen({ navigation }: Props) {
 
     const backHandler = BackHandler.addEventListener(
       'hardwareBackPress',
-      backAction
+      backAction,
     );
 
     return () => backHandler.remove();
-  }, [drawerOpen, browserOpen]); // ✅ Keep dependencies here for BackHandler
-
-  const handleOpenBrowser = (title: string, url: string) => {
-    // ✅ Check if mounted
-    if (!isMounted.current) return;
-    
-    setBrowserTitle(title);
-    setBrowserUrl(url);
-    setBrowserOpen(true);
-  };
+  }, [drawerOpen, browserOpen]); // ✅ Keep dependencies here for BackHandler;
 
   const superUser = members.find(member => member.userType === 'SuperUser');
 
@@ -119,18 +117,29 @@ export default function HomeScreen({ navigation }: Props) {
   const rewardBalance = 0;
 
   // ✅ Calculate dynamic bottom padding for ScrollView
-  // Base padding (16) + FloatingBottomNav height (56) + gap (16) + safe area
-  const scrollBottomPadding = 16 + 56 + 16 + (insets.bottom > 0 ? insets.bottom : 0);
+  const scrollBottomPadding =
+    16 + 56 + 16 + (insets.bottom > 0 ? insets.bottom : 0);
 
-  // ✅ Safe navigation helper
+  // ✅ UPDATED: Safe navigation helper with screen mapping
   const handleNavigation = (screen: string) => {
     if (!isMounted.current) {
       console.log('⚠️ Component unmounted, aborting navigation');
       return;
     }
-    
+
     try {
-      navigation.navigate(screen);
+      // ✅ Map quick action buttons to stack screens (without bottom tabs)
+      const screenMap: { [key: string]: string } = {
+        'ManageMembers': 'ManageMembers',
+        'Transactions': 'TransactionsStack',  // ✅ Navigate to stack version
+        'Reports': 'ReportsStack',            // ✅ Navigate to stack version
+        'Support': 'Support',
+        'Wallet': 'WalletStack',              // ✅ Navigate to stack version
+      };
+
+      const targetScreen = screenMap[screen] || screen;
+      console.log(`📍 HomeScreen: Navigating from "${screen}" to "${targetScreen}"`);
+      navigation.navigate(targetScreen);
     } catch (error) {
       console.log('❌ Navigation error:', error);
     }
@@ -140,13 +149,6 @@ export default function HomeScreen({ navigation }: Props) {
   const handleDrawerToggle = (open: boolean) => {
     if (isMounted.current) {
       setDrawerOpen(open);
-    }
-  };
-
-  // ✅ Safe browser toggle
-  const handleBrowserToggle = (open: boolean) => {
-    if (isMounted.current) {
-      setBrowserOpen(open);
     }
   };
 
@@ -160,23 +162,14 @@ export default function HomeScreen({ navigation }: Props) {
         open={drawerOpen}
         onClose={() => handleDrawerToggle(false)}
         navigation={navigation}
-        onOpenBrowser={handleOpenBrowser}
-      />
-
-      {/* IN-APP BROWSER */}
-      <InAppBrowser
-        visible={browserOpen}
-        url={browserUrl}
-        title={browserTitle}
-        onClose={() => handleBrowserToggle(false)}
       />
 
       {/* CONTENT */}
       <ScrollView
         style={styles.content}
-        contentContainerStyle={{ 
-          padding: 16, 
-          paddingBottom: scrollBottomPadding
+        contentContainerStyle={{
+          padding: 16,
+          paddingBottom: scrollBottomPadding,
         }}
       >
         <Text style={styles.sectionTitle}>👋 Hi, {displayName}!</Text>

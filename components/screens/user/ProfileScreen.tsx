@@ -1,6 +1,6 @@
-// components/screens/user/ProfileScreen.tsx
+// components/screens/user/ProfileScreen.tsx - FIXED: Sticky Save Button
 /* eslint-disable react-native/no-inline-styles */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -45,6 +45,7 @@ import {
   updateProfile,
   clearError,
 } from '../../../store/slices/memberSlice';
+import { useApiErrorHandler } from '../../../hooks/useApiErrorHandler';
 
 type Props = {
   navigation: any;
@@ -55,20 +56,39 @@ type GenderType = 'Male' | 'Female' | 'Other';
 export default function ProfileScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const dispatch = useDispatch<AppDispatch>();
-
-  // ✅ Add isMounted ref for safe async operations
   const isMounted = useRef(true);
+  const { executeApiCall } = useApiErrorHandler();
 
   const { user } = useSelector((state: RootState) => state.auth);
-  const {
-    myProfile, // ✅ Use myProfile instead of filtering members
-    isLoadingProfile, // ✅ Use profile-specific loading state
-    profileError, // ✅ Use profile-specific error
-    isUpdatingProfile,
-    profileUpdateError,
-  } = useSelector((state: RootState) => state.members);
+  const { myProfile, isLoadingProfile, isUpdatingProfile, profileUpdateError } =
+    useSelector((state: RootState) => state.members);
+
+  // 🎯 DYNAMIC CALCULATIONS FOR STICKY SAVE BUTTON
+  const footerHeight = useMemo(() => {
+    // Only calculate if in edit mode
+    if (!isUpdatingProfile) {
+      const BUTTON_HEIGHT = 16 * 2 + 16; // paddingVertical (16 * 2) + font height (16)
+      const FOOTER_TOP_PADDING = 12;
+      const FOOTER_BOTTOM_PADDING = 16;
+      const safeAreaBottom = insets.bottom > 0 ? insets.bottom : 0;
+
+      return (
+        FOOTER_TOP_PADDING +
+        BUTTON_HEIGHT +
+        FOOTER_BOTTOM_PADDING +
+        safeAreaBottom
+      );
+    }
+    return 0;
+  }, [insets.bottom, isUpdatingProfile]);
+
+  // Calculate scroll content bottom padding
+  const contentBottomPadding = useMemo(() => {
+    return footerHeight + 20; // Extra 20px breathing room
+  }, [footerHeight]);
 
   const NAME_REGEX = /^[a-zA-Z0-9. ]+$/;
+
   // Form state
   const [avatar, setAvatar] = useState<string | null>(null);
   const [fullName, setFullName] = useState('');
@@ -92,27 +112,31 @@ export default function ProfileScreen({ navigation }: Props) {
     dateOfBirth: '',
   });
 
-  // ✅ Setup and cleanup
   useEffect(() => {
     isMounted.current = true;
-
     console.log('📱 ProfileScreen: Component mounted');
-    dispatch(fetchMyProfile()); // ✅ Fetch only my profile
+
+    const loadProfile = async () => {
+      await executeApiCall(() => dispatch(fetchMyProfile()).unwrap(), {
+        showSuccessToast: false,
+        showErrorToast: true,
+        customErrorMessage: 'Failed to load profile',
+      });
+    };
+
+    loadProfile();
 
     return () => {
       console.log('🧹 ProfileScreen: Unmounting...');
       isMounted.current = false;
     };
-  }, [dispatch]);
+  }, [dispatch, executeApiCall]);
 
-  // ✅ Handle hardware back button
   useEffect(() => {
     const backAction = () => {
       console.log('⬅️ HARDWARE BACK: ProfileScreen');
 
-      // Check if in edit mode
       if (isEditMode) {
-        // Prompt user before discarding changes
         Alert.alert(
           'Discard Changes?',
           'Are you sure you want to go back? Any unsaved changes will be lost.',
@@ -129,10 +153,9 @@ export default function ProfileScreen({ navigation }: Props) {
             },
           ],
         );
-        return true; // Prevent default back
+        return true;
       }
 
-      // Not in edit mode, allow normal back
       if (isMounted.current && navigation.canGoBack()) {
         navigation.goBack();
         return true;
@@ -149,7 +172,6 @@ export default function ProfileScreen({ navigation }: Props) {
     return () => backHandler.remove();
   }, [navigation, isEditMode]);
 
-  // ✅ Update form when myProfile data loads
   useEffect(() => {
     if (myProfile) {
       console.log('📝 Loading profile data into form:', myProfile.name);
@@ -187,20 +209,13 @@ export default function ProfileScreen({ navigation }: Props) {
     }
   }, [myProfile, user]);
 
-  // ✅ Handle errors
   useEffect(() => {
     if (profileUpdateError) {
       Alert.alert('Update Failed', profileUpdateError, [
         { text: 'OK', onPress: () => dispatch(clearError()) },
       ]);
     }
-
-    if (profileError) {
-      Alert.alert('Error Loading Profile', profileError, [
-        { text: 'OK', onPress: () => dispatch(clearError()) },
-      ]);
-    }
-  }, [profileUpdateError, profileError, dispatch]);
+  }, [profileUpdateError, dispatch]);
 
   function calculateDateFromAge(age: number): Date {
     const today = new Date();
@@ -218,8 +233,30 @@ export default function ProfileScreen({ navigation }: Props) {
     return age;
   };
 
-  // ✅ Safe navigation
   const handleBack = () => {
+    console.log('⬅️ handleBack called');
+
+    // ✅ Check if in edit mode
+    if (isEditMode) {
+      Alert.alert(
+        'Discard Changes?',
+        'Are you sure you want to go back? Any unsaved changes will be lost.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Discard',
+            style: 'destructive',
+            onPress: () => {
+              if (isMounted.current && navigation.canGoBack()) {
+                navigation.goBack();
+              }
+            },
+          },
+        ],
+      );
+      return; // ✅ Stop here if in edit mode
+    }
+    // ✅ Not in edit mode, go back directly
     try {
       if (isMounted.current && navigation.canGoBack()) {
         navigation.goBack();
@@ -230,11 +267,9 @@ export default function ProfileScreen({ navigation }: Props) {
   };
 
   const handleEditToggle = () => {
-    // ✅ Check if mounted
     if (!isMounted.current) return;
 
     if (isEditMode) {
-      // Canceling edit mode
       Alert.alert(
         'Discard Changes?',
         'Are you sure you want to cancel? Any unsaved changes will be lost.',
@@ -244,10 +279,8 @@ export default function ProfileScreen({ navigation }: Props) {
             text: 'Discard',
             style: 'destructive',
             onPress: () => {
-              // ✅ Check before state updates
               if (!isMounted.current) return;
 
-              // ✅ Reload original data from myProfile
               if (myProfile) {
                 setFullName(myProfile.name);
                 setEmail(myProfile.email || '');
@@ -276,7 +309,6 @@ export default function ProfileScreen({ navigation }: Props) {
         ],
       );
     } else {
-      // Entering edit mode
       setIsEditMode(true);
     }
   };
@@ -307,7 +339,6 @@ export default function ProfileScreen({ navigation }: Props) {
       } else {
         console.log('❌ Camera permission denied');
 
-        // ✅ Check before showing alert
         if (isMounted.current) {
           Alert.alert(
             'Permission Denied',
@@ -320,7 +351,6 @@ export default function ProfileScreen({ navigation }: Props) {
     } catch (err) {
       console.log('❌ Error requesting camera permission:', err);
 
-      // ✅ Check before showing alert
       if (isMounted.current) {
         Alert.alert(
           'Error',
@@ -332,7 +362,6 @@ export default function ProfileScreen({ navigation }: Props) {
   };
 
   const handleImageResponse = (response: ImagePickerResponse) => {
-    // ✅ Check if mounted
     if (!isMounted.current) return;
 
     if (response.didCancel) {
@@ -427,7 +456,6 @@ export default function ProfileScreen({ navigation }: Props) {
   };
 
   const handleDateChange = (event: any, selectedDate?: Date) => {
-    // ✅ Check if mounted
     if (!isMounted.current) return;
 
     setShowDatePicker(Platform.OS === 'ios');
@@ -436,11 +464,11 @@ export default function ProfileScreen({ navigation }: Props) {
       setErrors({ ...errors, dateOfBirth: '' });
     }
   };
-  // Validate form
+
   const validateForm = (): boolean => {
     const newErrors = { fullName: '', mobile: '', email: '', dateOfBirth: '' };
     let isValid = true;
-    // Full Name
+
     if (!fullName.trim()) {
       newErrors.fullName = 'Full name is required';
       isValid = false;
@@ -454,7 +482,7 @@ export default function ProfileScreen({ navigation }: Props) {
     } else {
       newErrors.fullName = '';
     }
-    // Mobile is read-only, no need to validate
+
     if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       newErrors.email = 'Invalid email format';
       isValid = false;
@@ -480,7 +508,6 @@ export default function ProfileScreen({ navigation }: Props) {
   };
 
   const handleSave = async () => {
-    // ✅ Check if mounted
     if (!isMounted.current) {
       console.log('⚠️ Component unmounted, aborting save');
       return;
@@ -490,79 +517,58 @@ export default function ProfileScreen({ navigation }: Props) {
       return;
     }
 
-    try {
-      const calculatedAge = dateOfBirth ? calculateAge(dateOfBirth) : undefined;
+    const calculatedAge = dateOfBirth ? calculateAge(dateOfBirth) : undefined;
 
-      let imageToSend: string | null = null;
+    let imageToSend: string | null = null;
 
-      if (avatar) {
-        // Check if avatar is a local file (starts with file://) or an existing URL
-        if (avatar.startsWith('file://')) {
-          // ✅ New image selected from gallery/camera
-          imageToSend = avatar;
-          console.log('📸 Sending new image file');
-        } else if (
-          avatar.startsWith('http://') ||
-          avatar.startsWith('https://')
-        ) {
-          // ✅ Existing image URL - DON'T send it
-          console.log('ℹ️ Image unchanged, not sending to backend');
-          imageToSend = null;
-        } else {
-          // ✅ Fallback: treat as local file
-          imageToSend = avatar;
-        }
-      }
-
-      console.log('💾 Saving profile...');
-      console.log('Data:', {
-        fullName: fullName.trim(),
-        email: email.trim() || null,
-        age: calculatedAge,
-        gender: gender,
-        profileImage: imageToSend ? 'FILE' : null,
-      });
-
-      const resultAction = await dispatch(
-        updateProfile({
-          fullName: fullName.trim(),
-          email: email.trim() || null,
-          age: calculatedAge,
-          gender: gender,
-          profileImage: imageToSend, // ✅ Only send if new image selected
-        }),
-      );
-
-      // ✅ Check if still mounted after async operation
-      if (!isMounted.current) {
-        console.log(
-          '⚠️ Component unmounted after update, skipping UI updates',
-        );
-        return;
-      }
-
-      if (updateProfile.fulfilled.match(resultAction)) {
-        console.log('✅ Profile updated successfully');
-        setIsEditMode(false);
-        setShowSuccessModal(true);
-      }
-    } catch (error: any) {
-      console.log('❌ Profile update error:', error);
-
-      // ✅ Only show alert if mounted
-      if (isMounted.current) {
-        Alert.alert('Error', error.message || 'An unexpected error occurred');
+    if (avatar) {
+      if (avatar.startsWith('file://')) {
+        imageToSend = avatar;
+        console.log('📸 Sending new image file');
+      } else if (
+        avatar.startsWith('http://') ||
+        avatar.startsWith('https://')
+      ) {
+        console.log('ℹ️ Image unchanged, not sending to backend');
+        imageToSend = null;
+      } else {
+        imageToSend = avatar;
       }
     }
+
+    console.log('💾 Saving profile...');
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const result = await executeApiCall(
+      () =>
+        dispatch(
+          updateProfile({
+            fullName: fullName.trim(),
+            email: email.trim() || null,
+            age: calculatedAge,
+            gender: gender,
+            profileImage: imageToSend,
+          }),
+        ).unwrap(),
+      {
+        showSuccessToast: false,
+        showErrorToast: true,
+        customErrorMessage: 'Failed to update profile',
+        onSuccess: () => {
+          if (!isMounted.current) return;
+          console.log('✅ Profile updated successfully');
+          setIsEditMode(false);
+          setShowSuccessModal(true);
+        },
+      },
+    );
   };
 
   const handleSuccessClose = () => {
-    // ✅ Check if mounted
     if (!isMounted.current) return;
 
     setShowSuccessModal(false);
 
-    // ✅ Safe navigation with try-catch
     try {
       if (navigation.canGoBack()) {
         navigation.goBack();
@@ -572,9 +578,6 @@ export default function ProfileScreen({ navigation }: Props) {
     }
   };
 
-  const scrollBottomPadding = 20 + (insets.bottom > 0 ? insets.bottom : 0);
-
-  // ✅ Loading state - use isLoadingProfile instead of isLoading
   if (isLoadingProfile && !myProfile) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -618,7 +621,11 @@ export default function ProfileScreen({ navigation }: Props) {
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: scrollBottomPadding },
+          {
+            paddingBottom: isEditMode
+              ? contentBottomPadding
+              : 20 + (insets.bottom > 0 ? insets.bottom : 0),
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -797,34 +804,41 @@ export default function ProfileScreen({ navigation }: Props) {
               ))}
             </View>
           </View>
-
-          {/* Save Button - Only shown in edit mode */}
-          {isEditMode && (
-            <TouchableOpacity
-              style={[
-                styles.saveButton,
-                isUpdatingProfile && styles.saveButtonDisabled,
-              ]}
-              onPress={handleSave}
-              disabled={isUpdatingProfile}
-            >
-              {isUpdatingProfile ? (
-                <>
-                  <ActivityIndicator color="#FAFAFA" />
-                  <Text style={[styles.saveButtonText, { marginLeft: 10 }]}>
-                    Updating...
-                  </Text>
-                </>
-              ) : (
-                <>
-                  <Save size={20} color="#FAFAFA" strokeWidth={2.5} />
-                  <Text style={styles.saveButtonText}>Save Changes</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
         </View>
       </ScrollView>
+
+      {/* 🎯 STICKY SAVE BUTTON AT BOTTOM - Only shown in edit mode */}
+      {isEditMode && (
+        <View
+          style={[
+            styles.stickyFooter,
+            { paddingBottom: insets.bottom > 0 ? insets.bottom : 0 },
+          ]}
+        >
+          <TouchableOpacity
+            style={[
+              styles.saveButton,
+              isUpdatingProfile && styles.saveButtonDisabled,
+            ]}
+            onPress={handleSave}
+            disabled={isUpdatingProfile}
+          >
+            {isUpdatingProfile ? (
+              <>
+                <ActivityIndicator color="#FAFAFA" />
+                <Text style={[styles.saveButtonText, { marginLeft: 10 }]}>
+                  Updating...
+                </Text>
+              </>
+            ) : (
+              <>
+                <Save size={20} color="#FAFAFA" strokeWidth={2.5} />
+                <Text style={styles.saveButtonText}>Save Changes</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Date Picker */}
       {showDatePicker && isEditMode && !isUpdatingProfile && (
@@ -915,21 +929,9 @@ const styles = StyleSheet.create({
   placeholder: {
     width: 40,
   },
-  editModeBanner: {
-    backgroundColor: '#10B981',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#059669',
-  },
-  editModeText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
   content: {
     padding: 20,
+    // paddingBottom is now dynamic - applied inline
   },
   avatarSection: {
     alignItems: 'center',
@@ -1113,6 +1115,26 @@ const styles = StyleSheet.create({
   genderButtonTextActive: {
     color: '#18181B',
   },
+
+  // 🎯 NEW: Sticky footer with solid background
+  stickyFooter: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#0A0A0A',
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#27272A',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 20,
+  },
+
   saveButton: {
     backgroundColor: '#10B981',
     borderRadius: 14,
@@ -1121,7 +1143,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 10,
-    marginTop: 12,
   },
   saveButtonDisabled: {
     opacity: 0.6,
@@ -1131,6 +1152,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
   },
+
   successOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.85)',

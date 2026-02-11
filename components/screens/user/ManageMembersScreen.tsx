@@ -1,6 +1,6 @@
-// components/screens/user/ManageMembersScreen.tsx
+// components/screens/user/ManageMembersScreen.tsx - FIXED: Sticky Add Button
 /* eslint-disable radix */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -26,21 +26,46 @@ import {
   createMember,
   updateMember,
   deleteMember,
-  clearError,
   setSelectedMember,
 } from '../../../store/slices/memberSlice';
 import { RootState, AppDispatch } from '../../../store';
+
+// ✅ Import global error handler
+import { useApiErrorHandler } from '../../../hooks/useApiErrorHandler';
 
 export default function ManageMembersScreen({ navigation }: any) {
   const isMounted = useRef(true);
 
   const dispatch = useDispatch<AppDispatch>();
-  const { members, isLoading, error, selectedMember } = useSelector(
+  const { members, isLoading, selectedMember } = useSelector(
     (state: RootState) => state.members,
   );
 
+  // ✅ Use global error handler
+  const { executeApiCall } = useApiErrorHandler();
+
   const insets = useSafeAreaInsets();
   const NAME_REGEX = /^[a-zA-Z0-9. ]+$/;
+
+  // 🎯 DYNAMIC CALCULATIONS FOR STICKY BUTTON
+  const footerHeight = useMemo(() => {
+    const BUTTON_HEIGHT = 16 * 2 + 15; // paddingVertical (16 * 2) + font height (15)
+    const FOOTER_TOP_PADDING = 12;
+    const FOOTER_BOTTOM_PADDING = 16;
+    const safeAreaBottom = insets.bottom > 0 ? insets.bottom : 0;
+    
+    return (
+      FOOTER_TOP_PADDING +
+      BUTTON_HEIGHT +
+      FOOTER_BOTTOM_PADDING +
+      safeAreaBottom
+    );
+  }, [insets.bottom]);
+
+  // Calculate scroll content bottom padding
+  const contentBottomPadding = useMemo(() => {
+    return footerHeight + 20; // Extra 20px breathing room
+  }, [footerHeight]);
 
   // Form states
   const [showAddForm, setShowAddForm] = useState(false);
@@ -53,26 +78,38 @@ export default function ManageMembersScreen({ navigation }: any) {
   const [nameError, setNameError] = useState('');
   const [ageError, setAgeError] = useState('');
 
+  // ✅ Fetch members with error handling
+  const loadMembers = useCallback(async () => {
+    await executeApiCall(
+      () => dispatch(fetchMembers()).unwrap(),
+      {
+        showSuccessToast: false,
+        showErrorToast: true,
+        customErrorMessage: 'Failed to load family members',
+        retryCallback: loadMembers,
+      }
+    );
+  }, [dispatch, executeApiCall]);
+
   // ✅ Setup and cleanup
   useEffect(() => {
     isMounted.current = true;
 
     console.log('👥 ManageMembersScreen: Component mounted');
     console.log('🔄 Fetching members...');
-    dispatch(fetchMembers());
+    loadMembers();
 
     return () => {
       console.log('🧹 ManageMembersScreen: Unmounting...');
       isMounted.current = false;
     };
-  }, [dispatch]);
+  }, [loadMembers]);
 
   // ✅ Handle hardware back button
   useEffect(() => {
     const backAction = () => {
       console.log('⬅️ HARDWARE BACK: ManageMembersScreen');
 
-      // ✅ Check if mounted before navigation
       if (isMounted.current && navigation.canGoBack()) {
         navigation.goBack();
         return true;
@@ -87,14 +124,6 @@ export default function ManageMembersScreen({ navigation }: any) {
 
     return () => backHandler.remove();
   }, [navigation]);
-
-  // Handle errors
-  useEffect(() => {
-    if (error) {
-      Alert.alert('Error', error);
-      dispatch(clearError());
-    }
-  }, [error, dispatch]);
 
   // ✅ Safe navigation helper
   const handleBack = () => {
@@ -150,45 +179,39 @@ export default function ManageMembersScreen({ navigation }: any) {
     return valid;
   };
 
-  // ✅ Handle add member with full safety
+  // ✅ Handle add member with global error handler
   const handleAddMember = async () => {
     if (!validateForm()) return;
 
-    // ✅ Check if mounted before starting
     if (!isMounted.current) {
       console.log('⚠️ Component unmounted, aborting add');
       return;
     }
 
-    try {
-      console.log('➕ Adding member...');
-
-      await dispatch(
+    const result = await executeApiCall(
+      () => dispatch(
         createMember({
           name: name.trim(),
           age: parseInt(age),
           gender,
         }),
-      ).unwrap();
-
-      // ✅ Check if still mounted after async
-      if (!isMounted.current) {
-        console.log('⚠️ Component unmounted after member add');
-        return;
+      ).unwrap(),
+      {
+        showSuccessToast: true,
+        successMessage: 'Family member added successfully!',
+        showErrorToast: true,
+        customErrorMessage: 'Member already exists. Please choose a different name.',
+        onSuccess: () => {
+          if (!isMounted.current) return;
+          resetForm();
+          setShowAddForm(false);
+        },
       }
+    );
 
-      console.log('✅ Member added successfully');
-
-      resetForm();
-      setShowAddForm(false);
-      Alert.alert('Success', 'Family member added successfully!');
-    } catch (err: any) {
-      console.log('❌ Add member error:', err);
-
-      // ✅ Only show alert if mounted
-      if (isMounted.current) {
-        Alert.alert('Error', err.message || 'Failed to add member');
-      }
+    // Reset form if failed
+    if (!result && isMounted.current) {
+      // Form stays open for user to retry
     }
   };
 
@@ -201,21 +224,18 @@ export default function ManageMembersScreen({ navigation }: any) {
     setShowEditModal(true);
   };
 
-  // ✅ Handle update member with full safety
+  // ✅ Handle update member with global error handler
   const handleUpdateMember = async () => {
     if (!selectedMember) return;
     if (!validateForm()) return;
 
-    // ✅ Check if mounted before starting
     if (!isMounted.current) {
       console.log('⚠️ Component unmounted, aborting update');
       return;
     }
 
-    try {
-      console.log('✏️ Updating member...');
-
-      await dispatch(
+    const result = await executeApiCall(
+      () => dispatch(
         updateMember({
           id: selectedMember.id,
           data: {
@@ -224,31 +244,28 @@ export default function ManageMembersScreen({ navigation }: any) {
             gender,
           },
         }),
-      ).unwrap();
-
-      // ✅ Check if still mounted after async
-      if (!isMounted.current) {
-        console.log('⚠️ Component unmounted after member update');
-        return;
+      ).unwrap(),
+      {
+        showSuccessToast: true,
+        successMessage: 'Family member updated successfully!',
+        showErrorToast: true,
+        customErrorMessage: 'Member already exists. Please choose a different name.',
+        onSuccess: () => {
+          if (!isMounted.current) return;
+          resetForm();
+          setShowEditModal(false);
+          dispatch(setSelectedMember(null));
+        },
       }
+    );
 
-      console.log('✅ Member updated successfully');
-
-      resetForm();
-      setShowEditModal(false);
-      dispatch(setSelectedMember(null));
-      Alert.alert('Success', 'Family member updated successfully!');
-    } catch (err: any) {
-      console.log('❌ Update member error:', err);
-
-      // ✅ Only show alert if mounted
-      if (isMounted.current) {
-        Alert.alert('Error', err.message || 'Failed to update member');
-      }
+    // Keep modal open if failed
+    if (!result && isMounted.current) {
+      // Modal stays open for user to retry
     }
   };
 
-  // ✅ Handle delete member with full safety
+  // ✅ Handle delete member with global error handler
   const handleDeleteMember = (member: any) => {
     Alert.alert(
       'Delete Member',
@@ -259,41 +276,25 @@ export default function ManageMembersScreen({ navigation }: any) {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            // ✅ Check if mounted before starting
             if (!isMounted.current) {
               console.log('⚠️ Component unmounted, aborting delete');
               return;
             }
 
-            try {
-              console.log('🗑️ Deleting member:', member.id);
-
-              await dispatch(deleteMember(member.id)).unwrap();
-
-              // ✅ Check if still mounted after async
-              if (!isMounted.current) {
-                console.log('⚠️ Component unmounted after member delete');
-                return;
+            await executeApiCall(
+              () => dispatch(deleteMember(member.id)).unwrap(),
+              {
+                showSuccessToast: true,
+                successMessage: 'Family member deleted successfully!',
+                showErrorToast: true,
+                customErrorMessage: 'Failed to delete member',
               }
-
-              console.log('✅ Member deleted successfully');
-
-              Alert.alert('Success', 'Family member deleted successfully!');
-            } catch (err: any) {
-              console.log('❌ Delete member error:', err);
-
-              // ✅ Only show alert if mounted
-              if (isMounted.current) {
-                Alert.alert('Error', err.message || 'Failed to delete member');
-              }
-            }
+            );
           },
         },
       ],
     );
   };
-
-  const contentBottomPadding = 40 + (insets.bottom > 0 ? insets.bottom : 0);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -306,7 +307,7 @@ export default function ManageMembersScreen({ navigation }: any) {
         <View style={styles.placeholder} />
       </View>
 
-      {/* CONTENT */}
+      {/* SCROLLABLE CONTENT */}
       <ScrollView
         contentContainerStyle={[
           styles.content,
@@ -390,12 +391,20 @@ export default function ManageMembersScreen({ navigation }: any) {
             </View>
           );
         })}
+      </ScrollView>
 
-        {/* ADD FAMILY MEMBER BUTTON */}
+      {/* 🎯 STICKY ADD BUTTON AT BOTTOM */}
+      <View
+        style={[
+          styles.stickyFooter,
+          // eslint-disable-next-line react-native/no-inline-styles
+          { paddingBottom: insets.bottom > 0 ? insets.bottom : 0 }
+        ]}
+      >
         <Pressable style={styles.addBtn} onPress={() => setShowAddForm(true)}>
           <Text style={styles.addText}>+ Add Family Member</Text>
         </Pressable>
-      </ScrollView>
+      </View>
 
       {/* ADD MEMBER MODAL */}
       <Modal
@@ -602,7 +611,7 @@ export default function ManageMembersScreen({ navigation }: any) {
   );
 }
 
-/* STYLES */
+/* ================= STYLES ================= */
 
 const styles = StyleSheet.create({
   container: {
@@ -637,6 +646,7 @@ const styles = StyleSheet.create({
 
   content: {
     padding: 16,
+    // paddingBottom is now dynamic - applied inline
   },
 
   loadingContainer: {
@@ -750,12 +760,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#0A0A0A',
   },
 
+  // 🎯 NEW: Sticky footer with solid background
+  stickyFooter: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#0A0A0A',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#27272A',
+    // Shadow for iOS
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    // Elevation for Android
+    elevation: 20,
+  },
+
   addBtn: {
     backgroundColor: '#8B5CF6',
     paddingVertical: 16,
     borderRadius: 16,
     alignItems: 'center',
-    marginTop: 8,
   },
   addText: {
     color: '#FAFAFA',

@@ -91,7 +91,7 @@ export default function SupportView({
         console.log('⚠️ Component unmounted during async operation');
       }
     };
-  }, []);
+  }, [submitting, timelineLoadingId]);
 
   useEffect(() => {
     setView(v => (tickets.length && v === 'form' ? 'history' : v));

@@ -1,4 +1,5 @@
 // components/screens/user/WalletScreen.tsx
+// ✅ UPDATED: Conditional header - Menu icon for tab navigation, Back arrow for stack navigation
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable react-native/no-inline-styles */
 import React, { useMemo, useState, useEffect, useRef } from 'react';
@@ -11,9 +12,21 @@ import {
   ScrollView,
   Alert,
   BackHandler,
+  TouchableOpacity,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Zap, Percent, IndianRupee } from 'lucide-react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { 
+  ChevronLeft, 
+  Zap, 
+  Percent, 
+  IndianRupee,
+  Menu, // ✅ NEW: Import Menu icon
+  ArrowLeft, // ✅ NEW: Import ArrowLeft icon
+} from 'lucide-react-native';
+import { useRoute } from '@react-navigation/native'; // ✅ NEW: Import useRoute
+
+// ✅ NEW: Import AppDrawer
+import AppDrawer from '../../common/AppDrawer';
 
 type Props = {
   navigation: any;
@@ -137,8 +150,19 @@ function AmountBreakdown({ cash, reward }: { cash: number; reward: number }) {
 }
 
 export default function WalletScreen({ navigation }: Props) {
-  // ✅ Add isMounted ref
   const isMounted = useRef(true);
+  const insets = useSafeAreaInsets();
+
+  // ✅ NEW: Detect navigation source
+  const route = useRoute();
+  const isFromTab = route.name === 'Wallet'; // Bottom tab navigation
+  const isFromStack = route.name === 'WalletStack'; // Stack navigation
+
+  console.log('💰 WalletScreen - Navigation source:', {
+    routeName: route.name,
+    isFromTab,
+    isFromStack,
+  });
   
   // Mock data - TODO: Replace with Redux/API data
   const cashBalance = 0;
@@ -146,7 +170,6 @@ export default function WalletScreen({ navigation }: Props) {
   const rewardRate = 0.05;
   const popularAmount = 500;
   
-  // ✅ Payment limits
   const MIN_AMOUNT = 100;
   const MAX_AMOUNT = 10000;
 
@@ -154,7 +177,31 @@ export default function WalletScreen({ navigation }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // ✅ Setup and cleanup
+  // ✅ NEW: Drawer state
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // 🎯 DYNAMIC CALCULATIONS FOR STICKY BUTTON
+  const footerHeight = useMemo(() => {
+    const BUTTON_HEIGHT = 14 * 2 + 16; // paddingVertical (14 * 2) + font height (16)
+    const POWERED_BY_HEIGHT = 12 + 10; // fontSize + marginTop
+    const FOOTER_TOP_PADDING = 12;
+    const FOOTER_BOTTOM_PADDING = 16;
+    const safeAreaBottom = insets.bottom > 0 ? insets.bottom : 0;
+    
+    return (
+      FOOTER_TOP_PADDING +
+      BUTTON_HEIGHT +
+      POWERED_BY_HEIGHT +
+      FOOTER_BOTTOM_PADDING +
+      safeAreaBottom
+    );
+  }, [insets.bottom]);
+
+  // Calculate scroll content bottom padding
+  const contentBottomPadding = useMemo(() => {
+    return footerHeight + 20; // Extra 20px breathing room
+  }, [footerHeight]);
+
   useEffect(() => {
     isMounted.current = true;
     
@@ -168,7 +215,7 @@ export default function WalletScreen({ navigation }: Props) {
         console.log('⚠️ Component unmounted during payment processing');
       }
     };
-  }, []);
+  }, [isProcessing]);
 
   const baseQuick: QuickAmount[] = useMemo(
     () => [
@@ -214,7 +261,6 @@ export default function WalletScreen({ navigation }: Props) {
 
   const showBreakdown = parsedAmount > 0;
 
-  // ✅ Helper function for actual navigation
   const performNavigation = () => {
     if (!isMounted.current) {
       console.log('⚠️ Component unmounted, aborting navigation');
@@ -231,7 +277,6 @@ export default function WalletScreen({ navigation }: Props) {
     }
   };
 
-  // ✅ Unified back handler with confirmation logic
   const handleBack = () => {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('⬅️ handleBack called');
@@ -247,7 +292,6 @@ export default function WalletScreen({ navigation }: Props) {
       return;
     }
     
-    // ✅ Block if processing payment
     if (isProcessing) {
       console.log('🚫 BLOCKED: Payment in progress');
       Alert.alert(
@@ -258,7 +302,6 @@ export default function WalletScreen({ navigation }: Props) {
       return;
     }
     
-    // ✅ Ask for confirmation if amount entered
     if (parsedAmount > 0) {
       console.log('⚠️ Amount entered, showing confirmation');
       Alert.alert(
@@ -285,21 +328,39 @@ export default function WalletScreen({ navigation }: Props) {
       return;
     }
     
-    // ✅ No amount entered, navigate directly
     console.log('✅ No amount, navigating back directly');
     performNavigation();
   };
 
-  // ✅ Hardware back handler - just calls handleBack
+  const handleMenuToggle = () => {
+    if (isMounted.current) {
+      setDrawerOpen(true);
+    }
+  };
+
+  // ✅ UPDATED: Hardware back button handling
   useEffect(() => {
     const backAction = () => {
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('⬅️ HARDWARE BACK PRESSED: WalletScreen');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       
-      handleBack(); // ✅ Use unified handler
+      // ✅ Priority 1: Close drawer if open (for tab navigation)
+      if (drawerOpen && isFromTab) {
+        console.log('🗂️ Closing drawer');
+        if (isMounted.current) {
+          setDrawerOpen(false);
+        }
+        return true; // Prevent default back
+      }
+
+      // ✅ Priority 2: Handle back normally (for stack navigation)
+      if (isFromStack) {
+        handleBack();
+        return true;
+      }
       
-      return true; // Always prevent default
+      return false;
     };
 
     const backHandler = BackHandler.addEventListener(
@@ -308,9 +369,8 @@ export default function WalletScreen({ navigation }: Props) {
     );
 
     return () => backHandler.remove();
-  }, [parsedAmount, isProcessing]); // ✅ Dependencies for handleBack closure
+  }, [parsedAmount, isProcessing, drawerOpen, isFromTab, isFromStack]);
 
-  // ✅ Validate amount before payment
   const validateAmount = (amt: number): string | null => {
     if (amt < MIN_AMOUNT) {
       return `Minimum amount is ₹${MIN_AMOUNT}`;
@@ -320,19 +380,16 @@ export default function WalletScreen({ navigation }: Props) {
       return `Maximum amount is ₹${MAX_AMOUNT}`;
     }
     
-    return null; // Valid
+    return null;
   };
 
-  // ✅ Handle add balance with validation and safety
   const handleAddBalance = async (amt: number) => {
     try {
-      // ✅ Check if mounted
       if (!isMounted.current) {
         console.log('⚠️ Component unmounted, aborting payment');
         return;
       }
       
-      // ✅ Validate amount
       const validationError = validateAmount(amt);
       if (validationError) {
         Alert.alert('Invalid Amount', validationError, [{ text: 'OK' }]);
@@ -349,29 +406,13 @@ export default function WalletScreen({ navigation }: Props) {
       console.log('Total:', amt + rewardForAmount);
       
       // TODO: Implement Razorpay payment integration
-      // Example:
-      // const paymentData = await createWalletRecharge(amt);
-      // const razorpayResponse = await RazorpayCheckout.open({
-      //   key: paymentData.key_id,
-      //   amount: paymentData.amount,
-      //   order_id: paymentData.razorpay_order_id,
-      //   name: 'MySehat Wallet',
-      //   description: 'Add Balance',
-      // });
-      
-      // Simulate async delay
       await new Promise<void>(resolve => setTimeout(resolve, 1000));
       
-      // ✅ Check if still mounted after async operation
       if (!isMounted.current) {
         console.log('⚠️ Component unmounted after payment initiation');
         return;
       }
       
-      // TODO: Verify payment with backend
-      // await verifyWalletRecharge(razorpayResponse);
-      
-      // ✅ For now, show coming soon alert
       Alert.alert(
         'Coming Soon',
         `Wallet recharge feature is coming soon!\n\nYou selected: ₹${amt}\nRewards: +₹${rewardForAmount}`,
@@ -384,7 +425,6 @@ export default function WalletScreen({ navigation }: Props) {
     } catch (error: any) {
       console.log('❌ Payment error:', error);
       
-      // ✅ Only show alert if mounted
       if (isMounted.current) {
         Alert.alert(
           'Payment Error',
@@ -393,37 +433,65 @@ export default function WalletScreen({ navigation }: Props) {
         );
       }
     } finally {
-      // ✅ Only update state if mounted
       if (isMounted.current) {
         setIsProcessing(false);
       }
     }
   };
 
+  // ✅ NEW: Render conditional header
+  const renderHeader = () => (
+    <View style={styles.header}>
+      {/* ✅ Conditional left button */}
+      {isFromStack ? (
+        // Stack navigation - Show back arrow
+        <Pressable 
+          style={[
+            styles.iconBtn,
+            isProcessing && styles.iconBtnDisabled
+          ]} 
+          onPress={handleBack}
+          disabled={isProcessing}
+        >
+          <ArrowLeft 
+            size={20} 
+            color={isProcessing ? "#6B7280" : "#E5E7EB"} 
+          />
+        </Pressable>
+      ) : (
+        // Tab navigation - Show menu icon
+        <Pressable 
+          style={styles.iconBtn} 
+          onPress={handleMenuToggle}
+        >
+          <Menu size={20} color="#E5E7EB" />
+        </Pressable>
+      )}
+
+      <View style={{ flex: 1 }}>
+        <Text style={styles.headerTitle}>MySehat Wallet</Text>
+        <Text style={styles.headerSubtitle}>MySehat Cash + Rewards</Text>
+      </View>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Pressable 
-            style={[
-              styles.iconBtn,
-              isProcessing && styles.iconBtnDisabled
-            ]} 
-            onPress={handleBack}
-            disabled={isProcessing}
-          >
-            <ChevronLeft 
-              size={20} 
-              color={isProcessing ? "#6B7280" : "#E5E7EB"} 
-            />
-          </Pressable>
+      {/* ✅ NEW: Drawer for tab navigation */}
+      {isFromTab && (
+        <AppDrawer
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          navigation={navigation}
+        />
+      )}
 
-          <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>MySehat Wallet</Text>
-            <Text style={styles.headerSubtitle}>MySehat Cash + Rewards</Text>
-          </View>
-        </View>
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: contentBottomPadding }}
+      >
+        {/* ✅ UPDATED: Use renderHeader function */}
+        {renderHeader()}
 
         {/* Balance Card */}
         <View style={styles.balanceCard}>
@@ -535,25 +603,33 @@ export default function WalletScreen({ navigation }: Props) {
               );
             })}
           </View>
-
-          <Pressable
-            onPress={() => handleAddBalance(parsedAmount)}
-            disabled={!parsedAmount || isProcessing}
-            style={[
-              styles.primaryBtn,
-              (!parsedAmount || isProcessing) && styles.primaryBtnDisabled,
-            ]}
-          >
-            <Text style={styles.primaryBtnText}>
-              {isProcessing ? 'Processing...' : 'Add Balance'}
-            </Text>
-          </Pressable>
-
-          <Text style={styles.poweredBy}>
-            Secure payments powered by Razorpay
-          </Text>
         </View>
       </ScrollView>
+
+      {/* 🎯 STICKY ADD BALANCE BUTTON AT BOTTOM */}
+      <View
+        style={[
+          styles.stickyFooter,
+          { paddingBottom: insets.bottom > 0 ? insets.bottom : 0 }
+        ]}
+      >
+        <Pressable
+          onPress={() => handleAddBalance(parsedAmount)}
+          disabled={!parsedAmount || isProcessing}
+          style={[
+            styles.primaryBtn,
+            (!parsedAmount || isProcessing) && styles.primaryBtnDisabled,
+          ]}
+        >
+          <Text style={styles.primaryBtnText}>
+            {isProcessing ? 'Processing...' : 'Add Balance'}
+          </Text>
+        </Pressable>
+
+        <Text style={styles.poweredBy}>
+          Secure payments powered by Razorpay
+        </Text>
+      </View>
     </SafeAreaView>
   );
 }
@@ -835,19 +911,26 @@ const styles = StyleSheet.create({
   },
   coinTextSm: { color: '#111827', fontWeight: '900', fontSize: 11 },
 
-  viewMoreBtn: {
-    marginTop: 10,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    paddingVertical: 12,
-    alignItems: 'center',
+  // 🎯 Sticky footer with solid background
+  stickyFooter: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#09090B',
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.10)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 20,
   },
-  viewMoreText: { color: '#C4B5FD', fontWeight: '900' },
 
   primaryBtn: {
-    marginTop: 14,
     borderRadius: 16,
     backgroundColor: '#7C3AED',
     paddingVertical: 14,

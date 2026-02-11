@@ -15,7 +15,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ onMenuClick, rightSlot }) => {
     <View style={styles.container}>
       {/* Menu Button */}
       <Pressable onPress={onMenuClick} style={styles.iconButton}>
-        <Menu size={24} color="#A1A1AA" />
+        <Menu size={24} color="#FAFAFA" />
       </Pressable>
 
       {/* Logo */}

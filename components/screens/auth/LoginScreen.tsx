@@ -1,6 +1,6 @@
 /* eslint-disable react-native/no-inline-styles */
 // components/screens/auth/LoginScreen.tsx
-// ✅ FIXED: Reset OTP state on app restart if session is invalid
+// ✅ COMPLETE VERSION: Network Detection + OTP Session Reset + ErrorToast
 
 import React, {
   useMemo,
@@ -32,6 +32,7 @@ import { Edit2 } from 'lucide-react-native';
 import Loader from '../../common/Loader';
 import ErrorToast from '../../common/ErrorToast';
 import { useErrorToast } from '../../../hooks/useErrorToast';
+import { checkNetworkConnectivity } from '../../../hooks/useNetworkStatus';
 import { isValidIndianMobile } from '../../../utils/validators';
 import {
   verifyLogin,
@@ -97,7 +98,6 @@ export default function LoginScreen({ navigation }: Props) {
       setPhoneError('');
       setResendTimer(0);
       setIsEditingPhone(false);
-      
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run only on mount
@@ -305,6 +305,19 @@ export default function LoginScreen({ navigation }: Props) {
       return;
     }
 
+    // ✅ Check network connectivity BEFORE sending OTP
+    const isOnline = await checkNetworkConnectivity();
+    if (!isOnline) {
+      showError(
+        'No internet connection. Please check your WiFi or mobile data and try again.',
+        {
+          label: 'Retry',
+          onPress: () => handleSendOtp(),
+        }
+      );
+      return;
+    }
+
     if (isTestMode) {
       handleTestModeSendOtp();
       return;
@@ -342,7 +355,18 @@ export default function LoginScreen({ navigation }: Props) {
       console.log('❌ Send OTP error:', err);
 
       if (isMounted.current) {
-        setPhoneError(err.message || 'Failed to send OTP. Please try again.');
+        // Check if it's a network error
+        if (err.message && err.message.toLowerCase().includes('network')) {
+          showError(
+            'Network error. Please check your internet connection and try again.',
+            {
+              label: 'Retry',
+              onPress: () => handleSendOtp(),
+            }
+          );
+        } else {
+          setPhoneError(err.message || 'Failed to send OTP. Please try again.');
+        }
       }
     }
   };
@@ -359,6 +383,19 @@ export default function LoginScreen({ navigation }: Props) {
     setOtpError('');
     setOtp('');
     setReqId(null);
+
+    // ✅ Check network connectivity BEFORE resending OTP
+    const isOnline = await checkNetworkConnectivity();
+    if (!isOnline) {
+      showError(
+        'No internet connection. Please check your WiFi or mobile data and try again.',
+        {
+          label: 'Retry',
+          onPress: () => handleResendOtp(),
+        }
+      );
+      return;
+    }
 
     if (isTestMode) {
       handleTestModeSendOtp();
@@ -391,7 +428,18 @@ export default function LoginScreen({ navigation }: Props) {
       console.log('❌ Resend OTP error:', err);
 
       if (isMounted.current) {
-        setOtpError(err.message || 'Failed to resend OTP. Please try again.');
+        // Check if it's a network error
+        if (err.message && err.message.toLowerCase().includes('network')) {
+          showError(
+            'Network error. Please check your internet connection and try again.',
+            {
+              label: 'Retry',
+              onPress: () => handleResendOtp(),
+            }
+          );
+        } else {
+          setOtpError(err.message || 'Failed to resend OTP. Please try again.');
+        }
       }
     }
   };
@@ -474,6 +522,19 @@ export default function LoginScreen({ navigation }: Props) {
       return;
     }
 
+    // ✅ Check network connectivity BEFORE verifying OTP
+    const isOnline = await checkNetworkConnectivity();
+    if (!isOnline) {
+      showError(
+        'No internet connection. Please check your WiFi or mobile data and try again.',
+        {
+          label: 'Retry',
+          onPress: () => handleVerifyOtp(),
+        }
+      );
+      return;
+    }
+
     try {
       const verifyData = {
         reqId: reqId,
@@ -553,7 +614,16 @@ export default function LoginScreen({ navigation }: Props) {
       console.log('❌ Verify OTP error:', err);
 
       if (isMounted.current) {
-        if (err.message && err.message.toLowerCase().includes('invalid')) {
+        // Check if it's a network error
+        if (err.message && err.message.toLowerCase().includes('network')) {
+          showError(
+            'Network error. Please check your internet connection and try again.',
+            {
+              label: 'Retry',
+              onPress: () => handleVerifyOtp(),
+            }
+          );
+        } else if (err.message && err.message.toLowerCase().includes('invalid')) {
           setOtpError('Invalid OTP. Please check and try again.');
         } else if (
           err.message &&
@@ -991,8 +1061,5 @@ const styles = StyleSheet.create({
   },
   otpSectionContainer: {
     overflow: 'hidden',
-  },
-  otpSectionAnimated: {
-    // Animated styles will be applied inline
   },
 });

@@ -1,4 +1,5 @@
 // components/common/AppDrawer.tsx
+// ✅ UPDATED: Using renamed stack screens for navigation
 import React from 'react';
 import { Text, StyleSheet, Alert, Linking } from 'react-native';
 import { useDispatch } from 'react-redux';
@@ -23,7 +24,6 @@ interface AppDrawerProps {
   open: boolean;
   onClose: () => void;
   navigation: any;
-  // ✅ REMOVED: onOpenBrowser prop (no longer needed)
 }
 
 const AppDrawer: React.FC<AppDrawerProps> = ({
@@ -33,16 +33,29 @@ const AppDrawer: React.FC<AppDrawerProps> = ({
 }) => {
   const dispatch = useDispatch<AppDispatch>();
 
+  // ✅ UPDATED: Navigate to stack screens (without bottom tabs)
   const handleNavigation = (screen: string, params?: any) => {
     onClose();
+    
+    // ✅ Map drawer menu items to stack screens
+    const screenMap: { [key: string]: string } = {
+      'Reports': 'ReportsStack',        // ✅ Navigate to stack version
+      'Transactions': 'TransactionsStack', // ✅ Navigate to stack version
+      'Profile': 'Profile',
+      'Support': 'Support',
+    };
+
+    const targetScreen = screenMap[screen] || screen;
+    console.log(`📍 AppDrawer: Navigating from "${screen}" to "${targetScreen}"`);
+    
     if (params) {
-      navigation.navigate(screen, params);
+      navigation.navigate(targetScreen, params);
     } else {
-      navigation.navigate(screen);
+      navigation.navigate(targetScreen);
     }
   };
 
-  // ✅ NEW: Open URL in external browser
+  // ✅ Open URL in external browser
   const handleOpenURL = async (url: string, title: string) => {
     onClose();
     
@@ -128,14 +141,14 @@ const AppDrawer: React.FC<AppDrawerProps> = ({
         onPress={() => handleNavigation('Profile')}
       />
 
-      {/* Reports */}
+      {/* Reports - Opens as full stack screen */}
       <DrawerItem
         label="Reports"
         icon={FileText}
         onPress={() => handleNavigation('Reports')}
       />
 
-      {/* Transactions */}
+      {/* Transactions - Opens as full stack screen */}
       <DrawerItem
         label="Transactions"
         icon={ArrowLeftRight}

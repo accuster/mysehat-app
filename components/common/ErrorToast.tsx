@@ -1,6 +1,6 @@
 // components/common/ErrorToast.tsx
 import React, { useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Animated, Pressable } from 'react-native';
+import { Modal, View, Text, StyleSheet, Animated, Pressable } from 'react-native';
 import { AlertCircle, AlertTriangle, Info, CheckCircle } from 'lucide-react-native';
 
 export type ToastType = 'error' | 'warning' | 'info' | 'success';
@@ -85,8 +85,6 @@ export default function ErrorToast({
     }
   }, [visible, duration, handleDismiss, opacity, scale]);
 
-  if (!visible) return null;
-
   // Get icon based on type
   const getIcon = () => {
     switch (type) {
@@ -153,7 +151,14 @@ export default function ErrorToast({
   const colors = getColors();
 
   return (
-    <>
+    <Modal
+      transparent
+      visible={visible}
+      animationType="none"
+      onRequestClose={handleDismiss}
+      statusBarTranslucent
+      presentationStyle="overFullScreen"  // ✅ Forces highest z-index
+    >
       {/* Dark overlay background */}
       <Animated.View
         style={[
@@ -210,7 +215,7 @@ export default function ErrorToast({
           </View>
         </View>
       </Animated.View>
-    </>
+    </Modal>
   );
 }
 
@@ -222,8 +227,6 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    zIndex: 9998,
-    elevation: 998,
   },
 
   container: {
@@ -235,8 +238,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
-    zIndex: 9999,
-    elevation: 999,
     pointerEvents: 'box-none',
   },
 

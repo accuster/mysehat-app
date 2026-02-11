@@ -1,6 +1,7 @@
-// components/screens/auth/LoginScreen.tsx
-// ✅ INDUSTRY STANDARD LOGIN - With ErrorToast Integration
 /* eslint-disable react-native/no-inline-styles */
+// components/screens/auth/LoginScreen.tsx
+// ✅ COMPLETE VERSION: Network Detection + OTP Session Reset + ErrorToast
+
 import React, {
   useMemo,
   useState,
@@ -23,13 +24,15 @@ import {
   BackHandler,
   Linking,
   Animated,
+  AppState,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { OTPWidget } from '@msg91comm/sendotp-react-native';
 import { Edit2 } from 'lucide-react-native';
 import Loader from '../../common/Loader';
-import ErrorToast from '../../common/ErrorToast'; // ✅ Import ErrorToast
-import { useErrorToast } from '../../../hooks/useErrorToast'; // ✅ Import hook
+import ErrorToast from '../../common/ErrorToast';
+import { useErrorToast } from '../../../hooks/useErrorToast';
+import { checkNetworkConnectivity } from '../../../hooks/useNetworkStatus';
 import { isValidIndianMobile } from '../../../utils/validators';
 import {
   verifyLogin,
@@ -40,13 +43,9 @@ import { RootState, AppDispatch } from '../../../store';
 
 const packageJson = require('../../../package.json');
 
-// MSG91 Configuration
 const MSG91_WIDGET_ID = '356a676a4159343638343132';
 const MSG91_TOKEN_AUTH = '442931TIzX7UoX8cUH68ee3e82P1';
 
-// ============================================================================
-// 🧪 TEST MODE CONFIGURATION
-// ============================================================================
 const TEST_MOBILE = '9876543210';
 const TEST_OTP = '654321';
 const TEST_MODE_ENABLED = true;
@@ -57,6 +56,7 @@ type Props = {
 
 export default function LoginScreen({ navigation }: Props) {
   const isMounted = useRef(true);
+  const appState = useRef(AppState.currentState);
 
   const dispatch = useDispatch<AppDispatch>();
   const { isLoading, error, otpSent } = useSelector(
@@ -72,15 +72,64 @@ export default function LoginScreen({ navigation }: Props) {
   const [isTestMode, setIsTestMode] = useState(false);
   const [isEditingPhone, setIsEditingPhone] = useState(false);
 
-  // ✅ ERROR TOAST HOOK
   const { toast, showError, showSuccess, showInfo, hideToast } =
     useErrorToast();
 
-  // Animation values
   const otpSectionHeight = useRef(new Animated.Value(0)).current;
   const otpSectionOpacity = useRef(new Animated.Value(0)).current;
 
   const canSendOtp = useMemo(() => isValidIndianMobile(phone), [phone]);
+
+  // ✅ FIX 1: Reset invalid OTP session on mount
+  useEffect(() => {
+    console.log('🔍 Checking OTP session validity...');
+    
+    // If Redux says OTP was sent, but we don't have reqId
+    // This means app was restarted after OTP was sent
+    if (otpSent && !reqId) {
+      console.log('⚠️ Invalid OTP session detected - resetting to phone input');
+      console.log('Redux otpSent:', otpSent);
+      console.log('Component reqId:', reqId);
+      
+      // Reset to initial state
+      dispatch(setOtpSent(false));
+      setOtp('');
+      setOtpError('');
+      setPhoneError('');
+      setResendTimer(0);
+      setIsEditingPhone(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only on mount
+
+  // ✅ FIX 2: Handle app coming back from background
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        console.log('📱 App came to foreground');
+        
+        // Check if OTP session is still valid
+        if (otpSent && !reqId) {
+          console.log('⚠️ OTP session lost after backgrounding - resetting');
+          dispatch(setOtpSent(false));
+          setOtp('');
+          setOtpError('');
+          setResendTimer(0);
+          
+          showInfo('OTP session expired. Please request a new OTP.');
+        }
+      }
+      
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [otpSent, reqId, dispatch, showInfo]);
 
   const handleOpenURL = useCallback(
     async (url: string, title: string) => {
@@ -230,7 +279,6 @@ export default function LoginScreen({ navigation }: Props) {
     setIsEditingPhone(false);
     setResendTimer(60);
 
-    // ✅ Use toast instead of Alert
     showInfo(
       `🧪 Test Mode Active\n\nTest OTP: ${TEST_OTP}\n\nEnter this OTP to login.`,
     );
@@ -254,6 +302,19 @@ export default function LoginScreen({ navigation }: Props) {
 
     if (!isValidIndianMobile(phone)) {
       setPhoneError('Please enter a valid 10-digit mobile number');
+      return;
+    }
+
+    // ✅ Check network connectivity BEFORE sending OTP
+    const isOnline = await checkNetworkConnectivity();
+    if (!isOnline) {
+      showError(
+        'No internet connection. Please check your WiFi or mobile data and try again.',
+        {
+          label: 'Retry',
+          onPress: () => handleSendOtp(),
+        }
+      );
       return;
     }
 
@@ -286,7 +347,6 @@ export default function LoginScreen({ navigation }: Props) {
         setIsEditingPhone(false);
         setResendTimer(60);
 
-        // ✅ Use toast instead of Alert
         showSuccess('OTP sent successfully! Please check your WhatsApp.');
       } else {
         throw new Error(response.message || 'Failed to send OTP');
@@ -295,7 +355,18 @@ export default function LoginScreen({ navigation }: Props) {
       console.log('❌ Send OTP error:', err);
 
       if (isMounted.current) {
-        setPhoneError(err.message || 'Failed to send OTP. Please try again.');
+        // Check if it's a network error
+        if (err.message && err.message.toLowerCase().includes('network')) {
+          showError(
+            'Network error. Please check your internet connection and try again.',
+            {
+              label: 'Retry',
+              onPress: () => handleSendOtp(),
+            }
+          );
+        } else {
+          setPhoneError(err.message || 'Failed to send OTP. Please try again.');
+        }
       }
     }
   };
@@ -312,6 +383,19 @@ export default function LoginScreen({ navigation }: Props) {
     setOtpError('');
     setOtp('');
     setReqId(null);
+
+    // ✅ Check network connectivity BEFORE resending OTP
+    const isOnline = await checkNetworkConnectivity();
+    if (!isOnline) {
+      showError(
+        'No internet connection. Please check your WiFi or mobile data and try again.',
+        {
+          label: 'Retry',
+          onPress: () => handleResendOtp(),
+        }
+      );
+      return;
+    }
 
     if (isTestMode) {
       handleTestModeSendOtp();
@@ -336,7 +420,6 @@ export default function LoginScreen({ navigation }: Props) {
         setReqId(hexReqId);
         setResendTimer(60);
 
-        // ✅ Use toast instead of Alert
         showSuccess('New OTP sent! Please check your WhatsApp.');
       } else {
         throw new Error(response.message || 'Failed to resend OTP');
@@ -345,7 +428,18 @@ export default function LoginScreen({ navigation }: Props) {
       console.log('❌ Resend OTP error:', err);
 
       if (isMounted.current) {
-        setOtpError(err.message || 'Failed to resend OTP. Please try again.');
+        // Check if it's a network error
+        if (err.message && err.message.toLowerCase().includes('network')) {
+          showError(
+            'Network error. Please check your internet connection and try again.',
+            {
+              label: 'Retry',
+              onPress: () => handleResendOtp(),
+            }
+          );
+        } else {
+          setOtpError(err.message || 'Failed to resend OTP. Please try again.');
+        }
       }
     }
   };
@@ -428,6 +522,19 @@ export default function LoginScreen({ navigation }: Props) {
       return;
     }
 
+    // ✅ Check network connectivity BEFORE verifying OTP
+    const isOnline = await checkNetworkConnectivity();
+    if (!isOnline) {
+      showError(
+        'No internet connection. Please check your WiFi or mobile data and try again.',
+        {
+          label: 'Retry',
+          onPress: () => handleVerifyOtp(),
+        }
+      );
+      return;
+    }
+
     try {
       const verifyData = {
         reqId: reqId,
@@ -507,7 +614,16 @@ export default function LoginScreen({ navigation }: Props) {
       console.log('❌ Verify OTP error:', err);
 
       if (isMounted.current) {
-        if (err.message && err.message.toLowerCase().includes('invalid')) {
+        // Check if it's a network error
+        if (err.message && err.message.toLowerCase().includes('network')) {
+          showError(
+            'Network error. Please check your internet connection and try again.',
+            {
+              label: 'Retry',
+              onPress: () => handleVerifyOtp(),
+            }
+          );
+        } else if (err.message && err.message.toLowerCase().includes('invalid')) {
           setOtpError('Invalid OTP. Please check and try again.');
         } else if (
           err.message &&
@@ -538,7 +654,6 @@ export default function LoginScreen({ navigation }: Props) {
     >
       <StatusBar barStyle="light-content" />
 
-      {/* ✅ ERROR TOAST - Rendered at root level */}
       <ErrorToast
         visible={toast.visible}
         message={toast.message}
@@ -622,14 +737,16 @@ export default function LoginScreen({ navigation }: Props) {
             )}
 
             <Animated.View
-              style={{
-                maxHeight: otpSectionHeight.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0, 500],
-                }),
-                opacity: otpSectionOpacity,
-                overflow: 'hidden',
-              }}
+              style={[
+                styles.otpSectionContainer,
+                {
+                  maxHeight: otpSectionHeight.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, 500],
+                  }),
+                  opacity: otpSectionOpacity,
+                },
+              ]}
             >
               <Text style={[styles.label, { marginTop: 14 }]}>Enter OTP</Text>
               <TextInput
@@ -703,11 +820,10 @@ export default function LoginScreen({ navigation }: Props) {
                 onPress={handleSendOtp}
                 disabled={!canSendOtp || isLoading}
                 style={({ pressed }) => [
-                  // ✅ Use function to access pressed state
                   styles.primaryBtn,
                   isTestMode && styles.testModeButton,
                   (!canSendOtp || isLoading) && styles.btnDisabled,
-                  pressed && styles.btnPressed, // ✅ Now pressed is defined
+                  pressed && styles.btnPressed,
                 ]}
               >
                 <Text style={styles.primaryBtnText}>
@@ -942,5 +1058,8 @@ const styles = StyleSheet.create({
   btnPressed: {
     opacity: 0.7,
     transform: [{ scale: 0.98 }],
+  },
+  otpSectionContainer: {
+    overflow: 'hidden',
   },
 });

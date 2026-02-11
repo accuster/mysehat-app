@@ -1,135 +1,108 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 // store/services/authApi.ts
-import axios, { AxiosInstance } from 'axios';
-import { LoginResponse, CompleteProfileRequest, CompleteProfileResponse } from '../../types/auth.types';
+// ✅ UPDATED: Using global apiClient for consistent error handling
+import { apiClient } from '../../utils/apiClient';
 import { storage } from '../../utils/storage';
-import { API_BASE_URL } from '../constant';
+import { 
+  LoginResponse, 
+  CompleteProfileRequest, 
+  CompleteProfileResponse 
+} from '../../types/auth.types';
 
-// Service for authentication-related API calls
+/**
+ * Service for authentication-related API calls
+ * Now using global apiClient for consistent error handling
+ */
 class AuthApiService {
-  private api: AxiosInstance;
-
-  constructor() {
-    this.api = axios.create({
-      baseURL: API_BASE_URL,
-      timeout: 10000,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    // Add request interceptor to attach token
-    this.api.interceptors.request.use(
-      async (config) => {
-        const token = await storage.getToken();
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-      },
-      (error) => {
-        return Promise.reject(error);
-      }
-    );
-
-    // Add response interceptor for error handling
-    this.api.interceptors.response.use(
-      (response) => response,
-      async (error) => {
-        const originalRequest = error.config;
-
-        // If token expired, try to refresh
-        if (error.response?.status === 401 && !originalRequest._retry) {
-          originalRequest._retry = true;
-
-          try {
-            const refreshToken = await storage.getRefreshToken();
-            if (refreshToken) {
-              const response = await this.refreshToken(refreshToken);
-              await storage.saveToken(response.data.token);
-              originalRequest.headers.Authorization = `Bearer ${response.data.token}`;
-              return this.api(originalRequest);
-            }
-          } catch (refreshError) {
-            // Refresh failed, logout user
-            await storage.clearAuth();
-            return Promise.reject(refreshError);
-          }
-        }
-
-        return Promise.reject(error);
-      }
-    );
-  }
-
   /**
    * Verify login with MSG91 access token
+   * POST /api/wa-auth/verify-login
    */
   async verifyLogin(accessToken: string, mobile: string): Promise<LoginResponse> {
-    try {
-      const response = await this.api.post<LoginResponse>('/wa-auth/verify-login', {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🔐 AuthAPI: Verify Login');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('Mobile:', mobile);
+    console.log('Access Token (first 20):', accessToken.substring(0, 20) + '...');
+
+    const response = await apiClient.post<LoginResponse>(
+      '/wa-auth/verify-login',
+      {
         accessToken,
         mobile,
-      });
-      return response.data;
-    } catch (error: any) {
-      throw this.handleError(error);
-    }
+      }
+    );
+
+    console.log('✅ Login verified successfully');
+    console.log('User ID:', response.user?.user_id);
+    console.log('Requires profile setup:', response.requiresProfileSetup);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    return response;
   }
 
   /**
    * Complete user profile
+   * POST /api/wa-auth/complete-profile
    */
   async completeProfile(data: CompleteProfileRequest): Promise<CompleteProfileResponse> {
-    try {
-      const response = await this.api.post<CompleteProfileResponse>('/wa-auth/complete-profile', data);
-      return response.data;
-    } catch (error: any) {
-      throw this.handleError(error);
-    }
+    console.log('📝 AuthAPI: Complete Profile');
+    console.log('Data:', {
+      fullName: data.fullName,
+      age: data.age,
+      gender: data.gender,
+    });
+
+    const response = await apiClient.post<CompleteProfileResponse>(
+      '/wa-auth/complete-profile',
+      data
+    );
+
+    console.log('✅ Profile completed successfully');
+
+    return response;
   }
 
   /**
    * Refresh access token
+   * POST /api/wa-auth/refresh-token
+   * 
+   * NOTE: This is called automatically by apiClient interceptor
+   * You typically don't need to call this manually
    */
   async refreshToken(refreshToken: string): Promise<any> {
-    try {
-      const response = await this.api.post('/wa-auth/refresh-token', {
-        refreshToken,
-      });
-      return response.data;
-    } catch (error: any) {
-      throw this.handleError(error);
-    }
+    console.log('🔄 AuthAPI: Refresh Token');
+
+    const response = await apiClient.post('/wa-auth/refresh-token', {
+      refreshToken,
+    });
+
+    console.log('✅ Token refreshed successfully');
+
+    return response;
   }
 
   /**
    * Logout
+   * POST /api/wa-auth/logout
    */
   async logout(): Promise<void> {
-    try {
-      await this.api.post('/wa-auth/logout');
-      await storage.clearAuth();
-    } catch (error: any) {
-      // Even if API call fails, clear local storage
-      await storage.clearAuth();
-      throw this.handleError(error);
-    }
-  }
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('👋 AuthAPI: Logout');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-  /**
-   * Handle API errors
-   */
-  private handleError(error: any): Error {
-    if (error.response) {
-      // Server responded with error
-      const message = error.response.data?.message || 'An error occurred';
-      return new Error(message);
-    } else if (error.request) {
-      // Request made but no response
-      return new Error('No response from server. Please check your connection.');
-    } else {
-      // Something else happened
-      return new Error(error.message || 'An unexpected error occurred');
+    try {
+      // Call logout API
+      await apiClient.post('/wa-auth/logout');
+      console.log('✅ Logout API call successful');
+    } catch (error) {
+      // Even if API fails, we still want to clear local storage
+      console.log('⚠️ Logout API failed, but continuing with local cleanup');
+    } finally {
+      // Always clear local auth data
+      await storage.clearAuth();
+      console.log('✅ Local auth data cleared');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     }
   }
 }

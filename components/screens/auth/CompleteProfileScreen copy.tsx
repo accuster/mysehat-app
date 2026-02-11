@@ -31,7 +31,8 @@ export default function CompleteProfileScreen({ navigation }: Props) {
   const isMounted = useRef(true);
   
   const dispatch = useDispatch<AppDispatch>();
-  const { isLoading } = useSelector((state: RootState) => state.auth);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { isLoading, error } = useSelector((state: RootState) => state.auth);
 
   const [fullName, setFullName] = useState('');
   const [age, setAge] = useState('');

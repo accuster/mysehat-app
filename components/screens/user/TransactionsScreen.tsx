@@ -1,6 +1,7 @@
 // components/screens/user/TransactionsScreen.tsx
+// ✅ UPDATED: Conditional header - Menu icon for tab navigation, Back arrow for stack navigation
 /* eslint-disable react-native/no-inline-styles */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -31,8 +32,15 @@ import {
   Calendar,
   CreditCard,
   DollarSign,
+  Menu, // ✅ NEW: Import Menu icon
 } from 'lucide-react-native';
+import { useRoute } from '@react-navigation/native'; // ✅ NEW: Import useRoute
 import DateTimePicker from '@react-native-community/datetimepicker';
+
+import { useApiErrorHandler } from '../../../hooks/useApiErrorHandler';
+
+// ✅ NEW: Import AppDrawer
+import AppDrawer from '../../common/AppDrawer';
 
 type Props = {
   navigation: any;
@@ -50,20 +58,33 @@ type FilterOptions = {
 export default function TransactionsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const dispatch = useAppDispatch();
-
-  // ✅ ADD THIS
   const isMounted = useRef(true);
+
+  // ✅ NEW: Detect navigation source
+  const route = useRoute();
+  const isFromTab = route.name === 'Transactions'; // Bottom tab navigation
+  const isFromStack = route.name === 'TransactionsStack'; // Stack navigation
+
+  console.log('💳 TransactionsScreen - Navigation source:', {
+    routeName: route.name,
+    isFromTab,
+    isFromStack,
+  });
+
+  const { executeApiCall } = useApiErrorHandler();
 
   // Redux state
   const { transactions, isLoading, error } = useAppSelector(
     state => state.transactions,
   );
 
+  // ✅ NEW: Drawer state
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
   // Local state
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filteredTransactions, setFilteredTransactions] =
-    useState(transactions);
+  const [filteredTransactions, setFilteredTransactions] = useState(transactions);
   const [showFilterModal, setShowFilterModal] = useState(false);
 
   // Date picker states
@@ -82,35 +103,59 @@ export default function TransactionsScreen({ navigation }: Props) {
 
   const [activeFiltersCount, setActiveFiltersCount] = useState(0);
 
-  // ✅ UPDATE this useEffect
+  const loadTransactions = useCallback(async () => {
+    await executeApiCall(
+      () => dispatch(fetchTransactions()).unwrap(),
+      {
+        showSuccessToast: false,
+        showErrorToast: true,
+        customErrorMessage: 'Failed to load transactions',
+        retryCallback: loadTransactions,
+      }
+    );
+  }, [dispatch, executeApiCall]);
+
   useEffect(() => {
     isMounted.current = true;
 
     console.log('💳 TransactionsScreen: Component mounted');
-    dispatch(fetchTransactions());
+    loadTransactions();
 
     return () => {
       console.log('🧹 TransactionsScreen: Unmounting...');
       isMounted.current = false;
     };
-  }, [dispatch]);
+  }, [loadTransactions]);
 
-  // Handle hardware back button
+  // ✅ UPDATED: Hardware back button handling
   useEffect(() => {
     const backAction = () => {
       console.log('⬅️ HARDWARE BACK: TransactionsScreen');
-      if (isMounted.current && navigation.canGoBack()) {
+
+      // ✅ Priority 1: Close drawer if open (for tab navigation)
+      if (drawerOpen && isFromTab) {
+        console.log('🗂️ Closing drawer');
+        if (isMounted.current) {
+          setDrawerOpen(false);
+        }
+        return true; // Prevent default back
+      }
+
+      // ✅ Priority 2: Navigate back (for stack navigation)
+      if (isFromStack && isMounted.current && navigation.canGoBack()) {
         navigation.goBack();
         return true;
       }
+
       return false;
     };
+
     const backHandler = BackHandler.addEventListener(
       'hardwareBackPress',
       backAction,
     );
     return () => backHandler.remove();
-  }, [navigation]);
+  }, [navigation, drawerOpen, isFromTab, isFromStack]);
 
   // Apply filters and search
   useEffect(() => {
@@ -120,7 +165,6 @@ export default function TransactionsScreen({ navigation }: Props) {
     if (searchQuery.trim() !== '') {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(txn => {
-        // ✅ Safely handle null/undefined values
         const transactionId = txn.transaction_id?.toLowerCase() || '';
         const paymentMethod = txn.payment_method?.toLowerCase() || '';
 
@@ -206,26 +250,28 @@ export default function TransactionsScreen({ navigation }: Props) {
     setActiveFiltersCount(count);
   }, [searchQuery, transactions, filters]);
 
-  // Handle pull-to-refresh
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     console.log('🔄 TransactionsScreen: Refreshing transactions...');
+    if (!isMounted.current) return;
+    
     setRefreshing(true);
-    await dispatch(fetchTransactions());
-    // ✅ CHECK BEFORE setState
+    await loadTransactions();
+    
     if (isMounted.current) {
       setRefreshing(false);
     }
-  };
+  }, [loadTransactions]);
 
-  // // Handle back navigation
-  // const handleBack = () => {
-  //   navigation.goBack();
-  // };
-
-  // ✅ FIX handleBack
+  // ✅ UPDATED: Conditional back/menu handler
   const handleBack = () => {
     if (isMounted.current && navigation.canGoBack()) {
       navigation.goBack();
+    }
+  };
+
+  const handleMenuToggle = () => {
+    if (isMounted.current) {
+      setDrawerOpen(true);
     }
   };
 
@@ -244,7 +290,6 @@ export default function TransactionsScreen({ navigation }: Props) {
     });
   };
 
-  // Handle start date change
   const handleStartDateChange = (event: any, selectedDate?: Date) => {
     setShowStartDatePicker(Platform.OS === 'ios');
     if (selectedDate) {
@@ -309,17 +354,41 @@ export default function TransactionsScreen({ navigation }: Props) {
 
   const contentBottomPadding = 20 + (insets.bottom > 0 ? insets.bottom : 0);
 
+  // ✅ UPDATED: Conditional header rendering
+  const renderHeader = () => (
+    <View style={styles.header}>
+      {/* ✅ Conditional left button */}
+      {isFromStack ? (
+        // Stack navigation - Show back arrow
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+          <ArrowLeft size={24} color="#FAFAFA" />
+        </TouchableOpacity>
+      ) : (
+        // Tab navigation - Show menu icon
+        <TouchableOpacity onPress={handleMenuToggle} style={styles.backButton}>
+          <Menu size={24} color="#FAFAFA" />
+        </TouchableOpacity>
+      )}
+      
+      <Text style={styles.headerTitle}>Transaction History</Text>
+      <View style={styles.placeholder} />
+    </View>
+  );
+
   // Render loading state
   if (isLoading && transactions.length === 0) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <ArrowLeft size={24} color="#FAFAFA" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Transaction History</Text>
-          <View style={styles.placeholder} />
-        </View>
+        {/* ✅ NEW: Drawer for tab navigation */}
+        {isFromTab && (
+          <AppDrawer
+            open={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            navigation={navigation}
+          />
+        )}
+
+        {renderHeader()}
 
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#10B981" />
@@ -333,16 +402,19 @@ export default function TransactionsScreen({ navigation }: Props) {
   if (error && transactions.length === 0) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <ArrowLeft size={24} color="#FAFAFA" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Transaction History</Text>
-          <View style={styles.placeholder} />
-        </View>
+        {/* ✅ NEW: Drawer for tab navigation */}
+        {isFromTab && (
+          <AppDrawer
+            open={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            navigation={navigation}
+          />
+        )}
+
+        {renderHeader()}
 
         <View style={styles.centerContainer}>
-          <Text style={styles.errorText}>❌ {error}</Text>
+          <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity
             style={styles.retryBtn}
             onPress={() => dispatch(fetchTransactions())}
@@ -358,13 +430,16 @@ export default function TransactionsScreen({ navigation }: Props) {
   if (transactions.length === 0) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <ArrowLeft size={24} color="#FAFAFA" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Transaction History</Text>
-          <View style={styles.placeholder} />
-        </View>
+        {/* ✅ NEW: Drawer for tab navigation */}
+        {isFromTab && (
+          <AppDrawer
+            open={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            navigation={navigation}
+          />
+        )}
+
+        {renderHeader()}
 
         <View style={styles.centerContainer}>
           <Text style={styles.emptyText}>💳 No transactions found</Text>
@@ -378,14 +453,17 @@ export default function TransactionsScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <ArrowLeft size={24} color="#FAFAFA" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Transaction History</Text>
-        <View style={styles.placeholder} />
-      </View>
+      {/* ✅ NEW: Drawer for tab navigation */}
+      {isFromTab && (
+        <AppDrawer
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          navigation={navigation}
+        />
+      )}
+
+      {/* ✅ UPDATED: Use renderHeader function */}
+      {renderHeader()}
 
       {/* Search Bar and Filter Section */}
       <View style={styles.searchContainer}>
@@ -438,7 +516,6 @@ export default function TransactionsScreen({ navigation }: Props) {
               />
             }
             renderItem={({ item }) => {
-              // ✅ Safely handle null payment_method
               const paymentMethod = item.payment_method || 'Unknown';
               const isCredit =
                 paymentMethod === 'UPI' ||
@@ -893,7 +970,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
 
-  // Filter Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.85)',

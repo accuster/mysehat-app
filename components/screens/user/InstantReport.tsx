@@ -1,4 +1,4 @@
-// components/screens/user/InstantReport.tsx - FIXED: Share button now generates and shares PDF
+// components/screens/user/InstantReport.tsx - FIXED: Sticky Download Button
 import React, {
   useMemo,
   useState,
@@ -16,7 +16,6 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  Alert,
   ActivityIndicator,
   BackHandler,
   Animated,
@@ -27,6 +26,8 @@ import {
   shareReportPdf,
 } from '../../../utils/generateReportPdf';
 import { showDownloadNotification } from '../../../utils/notificationService';
+import ErrorToast from '../../common/ErrorToast';
+import { useErrorToast } from '../../../hooks/useErrorToast';
 
 export type ReportData = {
   timestamp: string;
@@ -62,16 +63,36 @@ export default function InstantReport({ route, navigation }: Props) {
   const isMounted = useRef(true);
   const isGeneratingRef = useRef(false);
 
-  // ✅ Animation ref for share button blink
+  const { toast, showError, showSuccess, showWarning, hideToast } = useErrorToast();
   const shareBlinkAnim = useRef(new Animated.Value(1)).current;
 
   const [isGenerating, setIsGenerating] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [pdfPath, setPdfPath] = useState<string | null>(null);
-  const [isSharing, setIsSharing] = useState(false); // ✅ Track sharing state
+  const [isSharing, setIsSharing] = useState(false);
 
   const insets = useSafeAreaInsets();
 
-  // ✅ Setup and cleanup
+  // 🎯 DYNAMIC CALCULATIONS FOR STICKY DOWNLOAD BUTTON
+  const footerHeight = useMemo(() => {
+    const BUTTON_HEIGHT = 14 * 2 + 15; // paddingVertical (14 * 2) + font height (15)
+    const FOOTER_TOP_PADDING = 12;
+    const FOOTER_BOTTOM_PADDING = 16;
+    const safeAreaBottom = insets.bottom > 0 ? insets.bottom : 0;
+    
+    return (
+      FOOTER_TOP_PADDING +
+      BUTTON_HEIGHT +
+      FOOTER_BOTTOM_PADDING +
+      safeAreaBottom
+    );
+  }, [insets.bottom]);
+
+  // Calculate scroll content bottom padding
+  const contentBottomPadding = useMemo(() => {
+    return footerHeight + 20; // Extra 20px breathing room
+  }, [footerHeight]);
+
   useEffect(() => {
     isMounted.current = true;
 
@@ -97,17 +118,12 @@ export default function InstantReport({ route, navigation }: Props) {
     };
   }, []);
 
-  // ✅ Safe back navigation handler
   const handleBack = useCallback(() => {
     console.log('⬅️ handleBack called');
 
     if (isGenerating || isSharing) {
       console.log('⚠️ Cannot navigate back - PDF is generating/sharing');
-      Alert.alert(
-        'Please Wait',
-        'PDF is being processed. Please wait for it to complete.',
-        [{ text: 'OK' }],
-      );
+      showWarning('PDF is being processed. Please wait for it to complete.');
       return;
     }
 
@@ -126,9 +142,8 @@ export default function InstantReport({ route, navigation }: Props) {
     } catch (error) {
       console.log('❌ Navigation error:', error);
     }
-  }, [navigation, isGenerating, isSharing]);
+  }, [navigation, isGenerating, isSharing, showWarning]);
 
-  // ✅ Hardware back button handler
   useEffect(() => {
     console.log('✅ Setting up BackHandler for InstantReport');
 
@@ -180,9 +195,7 @@ export default function InstantReport({ route, navigation }: Props) {
     [data],
   );
 
-  // ✅ Blink animation for share button
   const triggerShareBlink = () => {
-    // Blink effect: fade to 0.3 opacity and back to 1
     Animated.sequence([
       Animated.timing(shareBlinkAnim, {
         toValue: 0.3,
@@ -207,7 +220,6 @@ export default function InstantReport({ route, navigation }: Props) {
     ]).start();
   };
 
-  // ✅ FIXED: Share button - hides loading overlay BEFORE opening share dialog
   const onShareReport = async () => {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('📤 Share Report: Started (Generate PDF + Share)');
@@ -219,41 +231,31 @@ export default function InstantReport({ route, navigation }: Props) {
         return;
       }
 
-      // ✅ Trigger blink animation
       triggerShareBlink();
 
       console.log('🔄 Setting isSharing = true');
       setIsSharing(true);
 
-      // ✅ STEP 1: Generate PDF first
       console.log('📝 Step 1: Generating PDF...');
       const generatedPath = await generateReportPdf(data);
 
-      // ✅ Check if still mounted after async PDF generation
       if (!isMounted.current) {
         console.log('⚠️ Component unmounted during PDF generation');
         console.log('⚠️ PDF was saved at:', generatedPath);
-        setIsSharing(false); // Clean up state
+        setIsSharing(false);
         return;
       }
 
       console.log('✅ PDF generated successfully:', generatedPath);
 
-      // ✅ Update pdfPath state
       setPdfPath(generatedPath);
 
-      // ✅ CRITICAL FIX: Hide loading overlay BEFORE opening share dialog
-      // The share dialog will block the app, so we need to update state first
       console.log('🔄 Setting isSharing = false (before opening share dialog)');
       setIsSharing(false);
 
-      // ✅ STEP 2: Share the generated PDF
-      // Note: This will open a modal dialog and block, but our overlay is already hidden
-      console.log('📤 Step 2: Opening share dialog for PDF...');
-
-      // Small delay to ensure state update completes before opening dialog
       await new Promise<void>(resolve => setTimeout(resolve, 100));
 
+      console.log('📤 Step 2: Opening share dialog for PDF...');
       await shareReportPdf(generatedPath);
 
       console.log('✅ Share dialog opened/closed successfully');
@@ -267,22 +269,14 @@ export default function InstantReport({ route, navigation }: Props) {
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       if (isMounted.current) {
-        Alert.alert(
-          'Error',
-          `Failed to generate/share PDF.\n\n${
-            error.message || 'Please try again.'
-          }`,
-          [{ text: 'OK' }],
-        );
-
-        // ✅ Make sure to reset state on error
+        showError(`Failed to generate/share PDF.\n\n${error.message || 'Please try again.'}`);
         setIsSharing(false);
       } else {
-        console.log('⚠️ Component unmounted, skipping error alert');
+        console.log('⚠️ Component unmounted, skipping error toast');
       }
     }
   };
-  // ✅ Download handler with NOTIFICATION
+
   const onDownloadReport = async () => {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('📥 Download Report: Started');
@@ -301,7 +295,6 @@ export default function InstantReport({ route, navigation }: Props) {
       console.log('📝 Calling generateReportPdf...');
       const path = await generateReportPdf(data);
 
-      // ✅ CRITICAL - Check if still mounted after async
       if (!isMounted.current) {
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         console.log('⚠️ COMPONENT UNMOUNTED DURING PDF GENERATION!');
@@ -310,7 +303,6 @@ export default function InstantReport({ route, navigation }: Props) {
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         isGeneratingRef.current = false;
 
-        // ✅ STILL SHOW NOTIFICATION even if unmounted!
         console.log('🔔 Showing notification for unmounted component');
         await showDownloadNotification(path);
 
@@ -320,25 +312,18 @@ export default function InstantReport({ route, navigation }: Props) {
       console.log('✅ PDF generated successfully:', path);
       console.log('✅ Component still mounted, safe to update state');
 
-      // ✅ Update state (only if mounted)
       setPdfPath(path);
 
-      // ✅ Show Alert.alert
-      console.log('📢 Showing success alert');
-      Alert.alert('Success! ✅', `PDF saved successfully!`, [
-        { text: 'OK', style: 'default' },
-      ]);
+      console.log('📢 Showing success toast');
+      showSuccess('PDF saved successfully!');
 
-      // ✅ CRITICAL FIX: Hide loader BEFORE opening PDF
       console.log('🔄 Setting isGenerating = false (before opening PDF)');
       setIsGenerating(false);
       isGeneratingRef.current = false;
 
-      // ✅ Small delay to ensure state update completes
       console.log('⏳ Waiting 100ms for UI to update...');
       await new Promise<void>(resolve => setTimeout(resolve, 100));
 
-      // ✅ NOW show notification (which auto-opens PDF)
       console.log('🔔 Showing system notification and opening PDF');
       await showDownloadNotification(path);
 
@@ -352,16 +337,11 @@ export default function InstantReport({ route, navigation }: Props) {
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       if (isMounted.current) {
-        Alert.alert(
-          'Error',
-          `Failed to generate PDF.\n\n${error.message || 'Please try again.'}`,
-          [{ text: 'OK' }],
-        );
+        showError(`Failed to generate PDF.\n\n${error.message || 'Please try again.'}`);
       } else {
-        console.log('⚠️ Component unmounted, skipping error alert');
+        console.log('⚠️ Component unmounted, skipping error toast');
       }
     } finally {
-      // ✅ Make sure loader is hidden in case of error
       if (isMounted.current) {
         console.log('🔄 Final cleanup: Setting isGenerating = false');
         setIsGenerating(false);
@@ -373,11 +353,16 @@ export default function InstantReport({ route, navigation }: Props) {
     }
   };
 
-  const scrollBottomPadding = -30 + (insets.bottom > 0 ? insets.bottom : 0);
-
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-      {/* Top Bar */}
+      <ErrorToast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onDismiss={hideToast}
+        action={toast.action}
+      />
+
       <View style={styles.topBar}>
         <Pressable
           onPress={handleBack}
@@ -395,7 +380,6 @@ export default function InstantReport({ route, navigation }: Props) {
 
         <Text style={styles.topTitle}>Report</Text>
 
-        {/* ✅ FIXED: Share button with loading state */}
         <Animated.View style={{ opacity: shareBlinkAnim }}>
           <Pressable
             onPress={onShareReport}
@@ -420,13 +404,11 @@ export default function InstantReport({ route, navigation }: Props) {
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingBottom: scrollBottomPadding },
+          { paddingBottom: contentBottomPadding },
         ]}
         scrollEnabled={!isGenerating && !isSharing}
       >
-        {/* Report Card */}
         <View style={styles.card}>
-          {/* Header */}
           <Text style={styles.brand}>MySehat.ai</Text>
           <Text style={styles.heading}>Body Composition Report</Text>
 
@@ -435,7 +417,6 @@ export default function InstantReport({ route, navigation }: Props) {
             <Meta label="Report ID" value={data.reportId} />
           </View>
 
-          {/* Patient */}
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Patient</Text>
             <Text style={styles.patientName}>{data.patientName}</Text>
@@ -453,7 +434,6 @@ export default function InstantReport({ route, navigation }: Props) {
             </View>
           </View>
 
-          {/* Main Report */}
           <Text style={styles.sectionTitle}>Main Report</Text>
 
           <View style={styles.table}>
@@ -473,29 +453,6 @@ export default function InstantReport({ route, navigation }: Props) {
             not replace professional medical advice.
           </Text>
 
-          {/* Download Button */}
-          <Pressable
-            style={[
-              styles.downloadBtn,
-              (isGenerating || isSharing) && styles.downloadBtnDisabled,
-            ]}
-            onPress={onDownloadReport}
-            disabled={isGenerating || isSharing}
-          >
-            {isGenerating ? (
-              <>
-                <ActivityIndicator size="small" color="#fff" />
-                <Text style={styles.downloadText}>Generating PDF...</Text>
-              </>
-            ) : (
-              <>
-                <Download size={18} color="#fff" />
-                <Text style={styles.downloadText}>Download Report</Text>
-              </>
-            )}
-          </Pressable>
-
-          {/* ✅ Generating/Sharing Overlay */}
           {(isGenerating || isSharing) && (
             <View style={styles.generatingOverlay}>
               <View style={styles.generatingCard}>
@@ -511,11 +468,39 @@ export default function InstantReport({ route, navigation }: Props) {
           )}
         </View>
       </ScrollView>
+
+      {/* 🎯 STICKY DOWNLOAD BUTTON AT BOTTOM */}
+      <View
+        style={[
+          styles.stickyFooter,
+          // eslint-disable-next-line react-native/no-inline-styles
+          { paddingBottom: insets.bottom > 0 ? insets.bottom : 0 }
+        ]}
+      >
+        <Pressable
+          style={[
+            styles.downloadBtn,
+            (isGenerating || isSharing) && styles.downloadBtnDisabled,
+          ]}
+          onPress={onDownloadReport}
+          disabled={isGenerating || isSharing}
+        >
+          {isGenerating ? (
+            <>
+              <ActivityIndicator size="small" color="#fff" />
+              <Text style={styles.downloadText}>Generating PDF...</Text>
+            </>
+          ) : (
+            <>
+              <Download size={18} color="#fff" />
+              <Text style={styles.downloadText}>Download Report</Text>
+            </>
+          )}
+        </Pressable>
+      </View>
     </SafeAreaView>
   );
 }
-
-/* ---------- Small Components ---------- */
 
 function Meta({ label, value }: { label: string; value: string }) {
   return (
@@ -564,6 +549,7 @@ const styles = StyleSheet.create({
 
   scroll: {
     padding: 10,
+    // paddingBottom is now dynamic - applied inline
   },
 
   card: {
@@ -707,9 +693,27 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
+  // 🎯 NEW: Sticky footer with solid background
+  stickyFooter: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#020617',
+    paddingHorizontal: 10,
+    paddingTop: 12,
+    paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#1E293B',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 20,
+  },
+
   downloadBtn: {
-    marginTop: 14,
-    backgroundColor: '#111827',
+    backgroundColor: '#8B5CF6',
     borderRadius: 14,
     paddingVertical: 14,
     flexDirection: 'row',

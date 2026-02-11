@@ -1,10 +1,11 @@
 // components/screens/user/SelectUserContainer.tsx
-// ✅ FIXED VERSION - Prevents crashes on back navigation
+// ✅ FIXED VERSION - With Toast Messages instead of Alerts
 import React, { useEffect, useState, useRef } from "react";
-import { Alert } from "react-native";
 import { useDispatch, useSelector } from 'react-redux';
 import SelectUserBottomSheet from "./SelectUserBottomSheet";
 import AddMemberModal from "./AddMemberModal";
+import ErrorToast from '../../common/ErrorToast';
+import { useErrorToast } from '../../../hooks/useErrorToast';
 import { fetchMembers, createMember } from '../../../store/slices/memberSlice';
 import { updateOrderUser } from '../../../store/slices/orderSlice';
 import { RootState, AppDispatch } from '../../../store';
@@ -24,8 +25,8 @@ export default function SelectUserContainer({ navigation, route }: Props) {
   const dispatch = useDispatch<AppDispatch>();
   const { members: reduxMembers, isLoading } = useSelector((state: RootState) => state.members);
   
-  // ✅ Track if component is mounted
   const isMounted = useRef(true);
+  const { toast, showError, showSuccess, hideToast } = useErrorToast();
   
   const { qrData, rawData, orderId } = route.params || {};
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -33,11 +34,9 @@ export default function SelectUserContainer({ navigation, route }: Props) {
   const [isSaving, setIsSaving] = useState(false);
   const [isUpdatingOrder, setIsUpdatingOrder] = useState(false);
 
-  // ✅ Setup and cleanup
   useEffect(() => {
     isMounted.current = true;
     
-    // Fetch members on mount
     if (reduxMembers.length === 0) {
       console.log('🔄 SelectUser: Fetching members...');
       dispatch(fetchMembers());
@@ -45,12 +44,10 @@ export default function SelectUserContainer({ navigation, route }: Props) {
       console.log('✅ SelectUser: Using cached members:', reduxMembers.length);
     }
 
-    // ✅ Cleanup on unmount
     return () => {
       console.log('🧹 SelectUser: Cleaning up...');
       isMounted.current = false;
       
-      // Cancel any pending operations
       if (isSaving) {
         console.log('⚠️ Component unmounted during save operation');
       }
@@ -58,9 +55,8 @@ export default function SelectUserContainer({ navigation, route }: Props) {
         console.log('⚠️ Component unmounted during order update');
       }
     };
-  }, [dispatch]);
+  }, [dispatch, isSaving, isUpdatingOrder, reduxMembers.length]);
 
-  // Format members for SelectUserScreen
   const formattedMembers = reduxMembers.map(member => ({
     id: member.id,
     name: member.name,
@@ -83,7 +79,6 @@ export default function SelectUserContainer({ navigation, route }: Props) {
   };
 
   const handleBack = () => {
-    // ✅ Safe navigation check
     try {
       if (navigation.canGoBack()) {
         navigation.goBack();
@@ -103,7 +98,6 @@ export default function SelectUserContainer({ navigation, route }: Props) {
   const handleSaveMember = async (data: { name: string; age: number; gender: 'Male' | 'Female' | 'Other' }) => {
     console.log('💾 Saving new member:', data);
     
-    // ✅ Check if still mounted
     if (!isMounted.current) {
       console.log('⚠️ Component unmounted, aborting save');
       return;
@@ -114,32 +108,27 @@ export default function SelectUserContainer({ navigation, route }: Props) {
     try {
       await dispatch(createMember(data)).unwrap();
       
-      // ✅ Check before state updates
       if (!isMounted.current) {
         console.log('⚠️ Component unmounted after create, skipping updates');
         return;
       }
       
       console.log('✅ Member added successfully!');
-      Alert.alert('Success', 'Family member added successfully!');
+      showSuccess('Family member added successfully!');
       
-      // Refresh members list
       await dispatch(fetchMembers());
       
-      // ✅ Check again before closing modal
       if (isMounted.current) {
         setShowAddModal(false);
       }
     } catch (error: any) {
       console.log('❌ Failed to add member:', error);
       
-      // ✅ Only show alert if mounted
       if (isMounted.current) {
-        Alert.alert('Error', error.message || 'Failed to add member');
+        showError(error.message || 'Member already exists. Please choose a different name.');
       }
       throw error;
     } finally {
-      // ✅ Only update state if mounted
       if (isMounted.current) {
         setIsSaving(false);
       }
@@ -164,9 +153,7 @@ export default function SelectUserContainer({ navigation, route }: Props) {
     console.log('📋 QR Data:', qrData);
     console.log('📋 Order ID:', orderId);
 
-    // ✅ UPDATE ORDER WITH SELECTED USER_ID
     if (orderId) {
-      // ✅ Check if mounted before starting
       if (!isMounted.current) {
         console.log('⚠️ Component unmounted, aborting order update');
         return;
@@ -181,7 +168,6 @@ export default function SelectUserContainer({ navigation, route }: Props) {
           userId: originalMember.id,
         })).unwrap();
         
-        // ✅ Check if still mounted after async operation
         if (!isMounted.current) {
           console.log('⚠️ Component unmounted after order update, skipping navigation');
           return;
@@ -191,14 +177,12 @@ export default function SelectUserContainer({ navigation, route }: Props) {
       } catch (error: any) {
         console.log('❌ Failed to update order:', error);
         
-        // ✅ Only show alert if mounted
         if (isMounted.current) {
-          Alert.alert('Error', 'Failed to update order. Please try again.');
+          showError('Unable to update order. Please check your connection.');
           setIsUpdatingOrder(false);
         }
         return;
       } finally {
-        // ✅ Only update state if mounted
         if (isMounted.current) {
           setIsUpdatingOrder(false);
         }
@@ -207,13 +191,11 @@ export default function SelectUserContainer({ navigation, route }: Props) {
       console.log('⚠️ No orderId provided, skipping order update');
     }
 
-    // ✅ Final mounted check before navigation
     if (!isMounted.current) {
       console.log('⚠️ Component unmounted, skipping navigation to Pay screen');
       return;
     }
 
-    // ✅ Safe navigation with try-catch
     try {
       navigation.navigate("Pay", {
         selectedUserName: originalMember.name,
@@ -233,13 +215,21 @@ export default function SelectUserContainer({ navigation, route }: Props) {
       console.log('❌ Navigation error:', error);
       
       if (isMounted.current) {
-        Alert.alert('Error', 'Navigation failed. Please try again.');
+        showError('Navigation failed. Please try again.');
       }
     }
   };
 
   return (
     <>
+      <ErrorToast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onDismiss={hideToast}
+        action={toast.action}
+      />
+
       <SelectUserBottomSheet
         members={formattedMembers}
         selectedIndex={selectedIndex}

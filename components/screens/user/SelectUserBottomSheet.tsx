@@ -9,8 +9,10 @@ import {
 } from 'react-native';
 import {
   BottomSheetBackdrop,
+  BottomSheetBackdropProps,
   BottomSheetFlatList,
   BottomSheetFooter,
+  BottomSheetFooterProps,
 } from '@gorhom/bottom-sheet';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -50,9 +52,31 @@ export default function SelectUserBottomSheet({
   /* 🔒 FIXED HEIGHT — NO EXPANSION */
   const snapPoints = useMemo(() => ['75%'], []);
 
+  /* 🎯 DYNAMIC CALCULATIONS FOR FOOTER */
+  const BUTTON_HEIGHT = 16 * 2 + 16; // paddingVertical (16 * 2) + font height estimate (16)
+  const FOOTER_TOP_PADDING = 12;
+  const FOOTER_BOTTOM_PADDING = 12;
+  
+  // Calculate total footer height dynamically
+  const footerHeight = useMemo(() => {
+    const safeAreaBottom = insets.bottom > 0 ? insets.bottom : 0;
+    return (
+      FOOTER_TOP_PADDING +
+      BUTTON_HEIGHT +
+      FOOTER_BOTTOM_PADDING +
+      safeAreaBottom
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [insets.bottom]);
+
+  // Calculate list bottom padding (footer height + extra space)
+  const listBottomPadding = useMemo(() => {
+    return footerHeight + 20; // Extra 20px breathing room
+  }, [footerHeight]);
+
   /* Backdrop */
   const renderBackdrop = useCallback(
-    (props: any) => (
+    (props: BottomSheetBackdropProps) => (
       <BottomSheetBackdrop
         {...props}
         appearsOnIndex={0}
@@ -68,18 +92,17 @@ export default function SelectUserBottomSheet({
     bottomSheetRef.current?.snapToIndex(0);
   }, []);
 
-  /* Sticky Footer */
+  /* 🎯 STICKY FOOTER WITH DYNAMIC BOTTOM INSET */
   const renderFooter = useCallback(
-    (props: any) => {
+    (props: BottomSheetFooterProps) => {
       const disabled = selectedIndex === null;
-      
-      // Calculate dynamic bottom inset
-      const bottomInset = insets.bottom > 0 ? insets.bottom + 8 : 20;
+
+      // Dynamic bottom inset - sits right above hardware nav bar
+      const bottomInset = insets.bottom > 0 ? insets.bottom : 0;
 
       return (
         <BottomSheetFooter {...props} bottomInset={bottomInset}>
-          {/* ✅ Wrapper View with solid background to block list items */}
-          <View style={styles.footerWrapper}>
+          <View style={[styles.footerWrapper, { paddingBottom: bottomInset }]}>
             <View style={styles.footer}>
               <Pressable
                 disabled={disabled}
@@ -109,7 +132,6 @@ export default function SelectUserBottomSheet({
   const renderItem = ({ item, index }: { item: Member; index: number }) => {
     const selected = selectedIndex === index;
 
-    
     return (
       <Pressable
         onPress={() => onSelect(index)}
@@ -118,7 +140,7 @@ export default function SelectUserBottomSheet({
         <View>
           <Text style={styles.name}>
             {item.name}
-            {item.isSuperUser && <Text style={styles.super}>  Super</Text>}
+            {item.isSuperUser && <Text style={styles.super}> Super</Text>}
           </Text>
           <Text style={styles.meta}>
             {item.age}/{item.gender}
@@ -135,6 +157,7 @@ export default function SelectUserBottomSheet({
         ref={bottomSheetRef}
         index={0}
         snapPoints={snapPoints}
+        enableDynamicSizing={false}
         enablePanDownToClose
         onClose={onBack}
         backdropComponent={renderBackdrop}
@@ -163,9 +186,12 @@ export default function SelectUserBottomSheet({
         ) : (
           <BottomSheetFlatList
             data={members}
-            keyExtractor={(item, i) => item.id || i.toString()}
+            keyExtractor={(item: Member, i: number) => item.id || i.toString()}
             renderItem={renderItem}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: listBottomPadding }
+            ]}
             showsVerticalScrollIndicator={true}
           />
         )}
@@ -222,10 +248,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // ✅ Increased bottom padding to prevent items from hiding behind footer
   listContent: {
     paddingHorizontal: 16,
-    paddingBottom: 120,
+    // paddingBottom is now dynamic - applied inline
   },
 
   card: {
@@ -261,16 +286,19 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  // ✅ NEW: Wrapper to ensure solid background that blocks list items
+  // 🎯 FIXED: Solid background with proper z-index to block list items
   footerWrapper: {
-    backgroundColor: '#0F172A',  // Solid background
-    paddingTop: 8,
-    // Add shadow to create separation effect
+    backgroundColor: '#0F172A',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#1E293B', // Subtle separator line
+    // Shadow for iOS
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.4,
     shadowRadius: 8,
-    elevation: 10,  // Android shadow
+    // Elevation for Android
+    elevation: 20,
   },
 
   footer: {

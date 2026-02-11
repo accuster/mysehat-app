@@ -1,4 +1,4 @@
-// components/screens/user/ScanScreen.tsx - FIXED: Custom error toast
+// components/screens/user/ScanScreen.tsx - FIXED: Variable naming conflict resolved
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useEffect, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,16 +22,15 @@ import {
 import { Animated, Easing } from 'react-native';
 import { useRef } from 'react';
 import { Vibration, Platform } from 'react-native';
-import { Flashlight, FlashlightOff, ArrowLeft } from 'lucide-react-native'; 
+import { Flashlight, FlashlightOff, ArrowLeft } from 'lucide-react-native';
 
 // ✅ Redux imports
 import { useAppDispatch, useAppSelector } from '../../../store/hook';
 import { createOrder } from '../../../store/slices/orderSlice';
 import { storage } from '../../../utils/storage';
 
-// ✅ Custom error toast
-import ErrorToast from '../../common/ErrorToast';
-import { useErrorToast } from '../../../hooks/useErrorToast';
+// ✅ CHANGED: Use global error handler instead of local toast
+import { useApiErrorHandler } from '../../../hooks/useApiErrorHandler';
 
 type Props = {
   navigation: any;
@@ -51,8 +50,8 @@ export default function ScanScreen({ navigation }: Props) {
   const { isLoading: orderLoading } = useAppSelector(state => state.orders);
   const { user } = useAppSelector(state => state.auth);
 
-  // ✅ Custom error toast
-  const { toast, showError, showWarning, hideToast } = useErrorToast();
+  // ✅ CHANGED: Use global error handler
+  const { executeApiCall } = useApiErrorHandler();
 
   // ✅ REFS AND ANIMATIONS
   const scanLineAnim = useRef(new Animated.Value(0)).current;
@@ -104,20 +103,20 @@ export default function ScanScreen({ navigation }: Props) {
   // ✅ Verify user data on mount
   useEffect(() => {
     const checkUser = async () => {
-      try {
-        const userData = await getUserData();
+      const userResult = await executeApiCall(() => getUserData(), {
+        showSuccessToast: false,
+        showErrorToast: true,
+        customErrorMessage: 'Please log in again to scan QR codes.',
+        onError: () => {
+          // Navigate to login if user data not found
+          navigation.replace('Auth');
+        },
+      });
+
+      if (userResult) {
         console.log('✅ ScanScreen: User verified on mount');
-        console.log('User ID:', userData.userId);
-        console.log('Mobile:', userData.mobile);
-      } catch (error: any) {
-        console.log('❌ ScanScreen: User verification failed on mount');
-        console.log('Error:', error.message);
-        
-        // ✅ Use custom toast instead of Alert
-        showError('Please log in again to scan QR codes.', {
-          label: 'Login',
-          onPress: () => navigation.replace('Auth')
-        });
+        console.log('User ID:', userResult.userId);
+        console.log('Mobile:', userResult.mobile);
       }
     };
 
@@ -176,7 +175,7 @@ export default function ScanScreen({ navigation }: Props) {
       isMounted.current = false;
     };
   }, []);
-  
+
   // ✅ Handle hardware back button
   useEffect(() => {
     const backAction = () => {
@@ -245,7 +244,7 @@ export default function ScanScreen({ navigation }: Props) {
     if (hasTorch && isActive) {
       setTorchOn(!torchOn);
     } else if (!hasTorch) {
-      showWarning('Your device does not have a flashlight.');
+      Alert.alert('Info', 'Your device does not have a flashlight.');
     }
   };
 
@@ -271,110 +270,106 @@ export default function ScanScreen({ navigation }: Props) {
     },
   });
 
-  // ✅ Handle QR code scan with Redux
+  // ✅ FIXED: Handle QR code scan with proper variable naming
   const handleQRCodeScanned = async (data: string) => {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('📱 QR CODE SCANNED');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('Raw QR Data (first 80 chars):', data.substring(0, 80) + '...');
     console.log('Data length:', data.length);
+    console.log('Full data:', data);
 
-    try {
-      const userData = await getUserData();
+    const result = await executeApiCall(
+      async () => {
+        const userData = await getUserData();
 
-      let encryptedPayload = data;
+        let encryptedPayload = data;
 
-      if (data.includes('SEHAT_BMI')) {
-        const match = data.match(/SEHAT_BMI(.+)/);
-        if (match && match[1]) {
-          encryptedPayload = decodeURIComponent(match[1]);
-          console.log('✅ Extracted payload from WhatsApp URL');
-          console.log(
-            'Encrypted payload (first 50 chars):',
-            encryptedPayload.substring(0, 50) + '...',
-          );
+        if (data.includes('SEHAT_BMI')) {
+          const match = data.match(/SEHAT_BMI(.+)/);
+          if (match && match[1]) {
+            encryptedPayload = decodeURIComponent(match[1]);
+            console.log('✅ Extracted payload from WhatsApp URL');
+            console.log('Encrypted payload length:', encryptedPayload.length); 
+            console.log('Encrypted payload:', encryptedPayload);
+          } else {
+            throw new Error('Could not extract payload from WhatsApp URL');
+          }
         } else {
-          throw new Error('Could not extract payload from WhatsApp URL');
+          console.log('ℹ️ Direct encrypted payload (not WhatsApp URL)');
         }
-      } else {
-        console.log('ℹ️ Direct encrypted payload (not WhatsApp URL)');
-      }
 
-      console.log('🚀 Sending to backend...');
-      console.log('User ID:', userData.userId);
-      console.log('Mobile:', userData.mobile);
-      console.log('Payload length:', encryptedPayload.length);
+        console.log('🚀 Sending to backend...');
+        console.log('User ID:', userData.userId);
+        console.log('Mobile:', userData.mobile);
+        console.log('Payload length:', encryptedPayload.length);
 
-      const result = await dispatch(
-        createOrder({
-          timestamp: new Date().toISOString(),
-          raw_payload: encryptedPayload,
-          mobile_number: userData.mobile,
-        }),
-      ).unwrap();
+        // ✅ FIXED: Renamed to orderResult to avoid conflict with outer 'result'
+        const orderResult = await dispatch(
+          createOrder({
+            timestamp: new Date().toISOString(),
+            raw_payload: encryptedPayload,
+            mobile_number: userData.mobile,
+          }),
+        ).unwrap();
 
-      // ✅ CHECK BEFORE navigation
-      if (!isMounted.current) {
-        console.log('⚠️ Component unmounted, skipping navigation');
-        return;
-      }
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('✅ Order created successfully!');
-      console.log('Order ID:', result.order_id);
-      console.log('Height:', result.height, 'cm');
-      console.log('Weight:', result.weight, 'kg');
-      console.log('BMI:', result.bmi);
-      console.log('Machine ID:', result.machine_id);
-      console.log('Test Fee: ₹', result.test_fee);
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        return orderResult;
+      },
+      {
+        showSuccessToast: false,
+        showErrorToast: true,
+        customErrorMessage:
+          'Invalid QR code. Please scan a valid QR code and try again.',
+        onSuccess: orderResult => {
+          // ✅ CHECK BEFORE navigation
+          if (!isMounted.current) {
+            console.log('⚠️ Component unmounted, skipping navigation');
+            return;
+          }
 
-      navigation.navigate('SelectUser', {
-        qrData: {
-          height: result.height,
-          weight: result.weight,
-          bmi: result.bmi,
-          machine_id: result.machine_id,
-          test_fee: result.test_fee,
-          order_id: result.order_id,
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.log('✅ Order created successfully!');
+          console.log('Order ID:', orderResult.order_id);
+          console.log('Height:', orderResult.height, 'cm');
+          console.log('Weight:', orderResult.weight, 'kg');
+          console.log('BMI:', orderResult.bmi);
+          console.log('Machine ID:', orderResult.machine_id);
+          console.log('Test Fee: ₹', orderResult.test_fee);
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+          navigation.navigate('SelectUser', {
+            qrData: {
+              height: orderResult.height,
+              weight: orderResult.weight,
+              bmi: orderResult.bmi,
+              machine_id: orderResult.machine_id,
+              test_fee: orderResult.test_fee,
+              order_id: orderResult.order_id,
+            },
+            rawData: data,
+            orderId: orderResult.order_id,
+          });
         },
-        rawData: data,
-        orderId: result.order_id,
-      });
-    } catch (error: any) {
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('❌ ERROR PROCESSING QR CODE');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('Error:', error);
-      console.log('Message:', error.message || error);
+        onError: (error: any) => {
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.log('❌ ERROR PROCESSING QR CODE');
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.log('Error:', error);
+          console.log('Message:', error.message || error);
 
-      // ✅ CHECK BEFORE setState
-      if (!isMounted.current) return;
+          // ✅ CHECK BEFORE setState
+          if (!isMounted.current) return;
 
-      setScannedData(null);
-      setIsActive(true);
-
-      // ✅ Better error messages based on error type
-      let errorMessage = 'Invalid QR code. Please scan a valid QR code and try again.';
-      
-      if (error.message?.includes('Invalid encrypted payload') || 
-          error.message?.includes('Malformed payload')) {
-        errorMessage = 'This is not a valid MySehat QR code. Please scan the QR code shown on the BMI machine screen.';
-      } else if (error.message?.includes('Machine') && error.message?.includes('not found')) {
-        errorMessage = 'Machine not found or inactive. Please contact support.';
-      } else if (error.message?.includes('User data not found')) {
-        errorMessage = 'Session expired. Please log in again.';
-      } else if (error.message?.includes('network') || error.message?.includes('Network')) {
-        errorMessage = 'Network error. Please check your internet connection and try again.';
-      }
-
-      // ✅ Use custom toast instead of Alert.alert
-      showError(errorMessage, {
-        label: 'Retry',
-        onPress: () => {
           setScannedData(null);
           setIsActive(true);
-        }
-      });
+        },
+      },
+    );
+
+    // ✅ Reset scanner if API call failed
+    if (!result && isMounted.current) {
+      setScannedData(null);
+      setIsActive(true);
     }
   };
 
@@ -430,15 +425,6 @@ export default function ScanScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      {/* ✅ Custom Error Toast */}
-      <ErrorToast
-        visible={toast.visible}
-        message={toast.message}
-        type={toast.type}
-        onDismiss={hideToast}
-        action={toast.action}
-      />
-
       {/* ✅ Solid Header Bar */}
       <View style={styles.header}>
         <Pressable onPress={handleBack} style={styles.backButton}>

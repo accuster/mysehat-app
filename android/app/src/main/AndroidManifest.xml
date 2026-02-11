@@ -3,7 +3,7 @@
 
     <!-- ============================================================ -->
     <!-- GOOGLE PLAY CONSOLE COMPLIANT PERMISSIONS -->
-    <!-- No READ_MEDIA_IMAGES or storage permissions required! -->
+    <!-- ✅ Storage permissions added for PDF downloads (Android 11 and below only) -->
     <!-- ============================================================ -->
 
     <!-- UPI Payment Apps Query -->
@@ -19,8 +19,6 @@
 
     <!-- Internet & Network -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
 
     <!-- Camera -->
     <uses-permission android:name="android.permission.CAMERA" />
@@ -29,6 +27,14 @@
     
     <!-- Notifications -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- ✅ NEW: Storage permissions for saving PDFs to Downloads folder -->
+    <!-- maxSdkVersion="32" means these permissions are NOT required on Android 13+ -->
+    <!-- This keeps your app Google Play compliant while supporting older Android versions -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
 
     <application
       android:name=".MainApplication"
@@ -39,7 +45,6 @@
       android:theme="@style/AppTheme"
       android:usesCleartextTraffic="${usesCleartextTraffic}"
       android:supportsRtl="true"
-      android:enableOnBackInvokedCallback="false"
       android:dataExtractionRules="@xml/data_extraction_rules"
       android:fullBackupContent="@xml/backup_rules">
 
@@ -69,13 +74,12 @@
         </intent-filter>
 
         <!-- Razorpay payment callback ONLY -->
-        <intent-filter>
+        <intent-filter android:autoVerify="true">
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.DEFAULT" />
             <category android:name="android.intent.category.BROWSABLE" />
             <data android:scheme="razorpay" />
         </intent-filter>
-        
       </activity>
 
       <!-- FileProvider for sharing files securely (PDFs, images, etc.) -->

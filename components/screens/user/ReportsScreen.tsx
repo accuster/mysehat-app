@@ -1,7 +1,8 @@
 // components/screens/user/ReportsScreen.tsx
+// ✅ UPDATED: Conditional header - Menu icon for tab navigation, Back arrow for stack navigation
 /* eslint-disable react-native/no-inline-styles */
 /* eslint-disable radix */
-import React, { useState, useEffect, useRef  } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -31,10 +32,16 @@ import {
   Scale,
   BarChart3,
   Heart,
+  Menu, // ✅ NEW: Import Menu icon
 } from 'lucide-react-native';
+import { useRoute } from '@react-navigation/native'; // ✅ NEW: Import useRoute
 import { useAppDispatch, useAppSelector } from '../../../store/hook';
 import { fetchReports } from '../../../store/slices/reportSlice';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { useApiErrorHandler } from '../../../hooks/useApiErrorHandler';
+
+// ✅ NEW: Import AppDrawer
+import AppDrawer from '../../common/AppDrawer';
 
 type Props = {
   navigation: any;
@@ -53,27 +60,37 @@ type FilterOptions = {
 
 export default function ReportsScreen({ navigation }: Props) {
   const dispatch = useAppDispatch();
-
-  // ✅ Track if component is mounted
   const isMounted = useRef(true);
-
   const insets = useSafeAreaInsets();
   const contentBottomPadding = 20 + (insets.bottom > 0 ? insets.bottom : 0);
 
+  // ✅ NEW: Detect navigation source
+  const route = useRoute();
+  const isFromTab = route.name === 'Reports'; // Bottom tab navigation
+  const isFromStack = route.name === 'ReportsStack'; // Stack navigation
+
+  console.log('📊 ReportsScreen - Navigation source:', {
+    routeName: route.name,
+    isFromTab,
+    isFromStack,
+  });
+
   // Redux state
   const { reports, isLoading, error } = useAppSelector(state => state.reports);
+
+  const { executeApiCall } = useApiErrorHandler();
+
+  // ✅ NEW: Drawer state
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Local state
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredReports, setFilteredReports] = useState(reports);
   const [showFilterModal, setShowFilterModal] = useState(false);
-
-  // Date picker states
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
 
-  // Filter state
   const [filters, setFilters] = useState<FilterOptions>({
     dateRange: 'all',
     startDate: null,
@@ -87,41 +104,49 @@ export default function ReportsScreen({ navigation }: Props) {
 
   const [activeFiltersCount, setActiveFiltersCount] = useState(0);
 
-  // ✅ Fetch reports with cleanup
+  const loadReports = useCallback(async () => {
+    await executeApiCall(
+      () => dispatch(fetchReports()).unwrap(),
+      {
+        showSuccessToast: false,
+        showErrorToast: true,
+        retryCallback: loadReports,
+      }
+    );
+  }, [dispatch, executeApiCall]);
+
   useEffect(() => {
     isMounted.current = true;
-
     console.log('📊 ReportsScreen: Component mounted');
-    dispatch(fetchReports());
+    loadReports();
 
     return () => {
       console.log('🧹 ReportsScreen: Unmounting...');
       isMounted.current = false;
     };
-  }, [dispatch]);
+  }, [loadReports]);
 
-    // ✅ Handle hardware back button
+  // ✅ UPDATED: Hardware back button handling
   useEffect(() => {
-    console.log('✅ Setting up BackHandler for ReportsScreen');
-    
     const backAction = () => {
-      console.log('⬅️ HARDWARE BACK PRESSED IN REPORTSSCREEN');
-      
-      // Check if mounted
-      if (!isMounted.current) {
-        console.log('⚠️ Component unmounted, aborting navigation');
-        return false;
+      console.log('⬅️ HARDWARE BACK: ReportsScreen');
+
+      // ✅ Priority 1: Close drawer if open (for tab navigation)
+      if (drawerOpen && isFromTab) {
+        console.log('🗂️ Closing drawer');
+        if (isMounted.current) {
+          setDrawerOpen(false);
+        }
+        return true; // Prevent default back
       }
-      
-      // Check if can go back
-      if (navigation.canGoBack()) {
-        console.log('✅ Safe to navigate back');
+
+      // ✅ Priority 2: Navigate back (for stack navigation)
+      if (isFromStack && isMounted.current && navigation.canGoBack()) {
         navigation.goBack();
-        return true; // We handled it
+        return true;
       }
-      
-      console.log('ℹ️ Cannot go back, letting Android handle');
-      return false; // Let Android handle
+
+      return false;
     };
 
     const backHandler = BackHandler.addEventListener(
@@ -129,13 +154,8 @@ export default function ReportsScreen({ navigation }: Props) {
       backAction
     );
 
-    console.log('✅ BackHandler registered successfully');
-
-    return () => {
-      console.log('🧹 Removing BackHandler');
-      backHandler.remove();
-    };
-  }, [navigation]);
+    return () => backHandler.remove();
+  }, [navigation, drawerOpen, isFromTab, isFromStack]);
 
   // Apply filters and search
   useEffect(() => {
@@ -243,36 +263,35 @@ export default function ReportsScreen({ navigation }: Props) {
     setActiveFiltersCount(count);
   }, [searchQuery, reports, filters]);
 
-  // ✅ Handle pull-to-refresh with isMounted check
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     console.log('🔄 ReportsScreen: Refreshing reports...');
+    if (!isMounted.current) return;
+    
     setRefreshing(true);
-    await dispatch(fetchReports());
-
-    // ✅ CHECK BEFORE setState
+    await loadReports();
+    
     if (isMounted.current) {
       setRefreshing(false);
     }
-  };
+  }, [loadReports]);
 
-  // // Handle back navigation
-  // const handleBack = () => {
-  //   navigation.goBack();
-  // };
-
-  // ✅ Handle back navigation with check
+  // ✅ UPDATED: Conditional back/menu handler
   const handleBack = () => {
     if (isMounted.current && navigation.canGoBack()) {
       navigation.goBack();
     }
   };
 
-  // Handle filter button press
+  const handleMenuToggle = () => {
+    if (isMounted.current) {
+      setDrawerOpen(true);
+    }
+  };
+
   const handleFilter = () => {
     setShowFilterModal(true);
   };
 
-  // Handle date range change
   const handleDateRangeChange = (value: any) => {
     setFilters({
       ...filters,
@@ -282,7 +301,6 @@ export default function ReportsScreen({ navigation }: Props) {
     });
   };
 
-  // Handle start date change
   const handleStartDateChange = (event: any, selectedDate?: Date) => {
     setShowStartDatePicker(Platform.OS === 'ios');
     if (selectedDate) {
@@ -290,7 +308,6 @@ export default function ReportsScreen({ navigation }: Props) {
     }
   };
 
-  // Handle end date change
   const handleEndDateChange = (event: any, selectedDate?: Date) => {
     setShowEndDatePicker(Platform.OS === 'ios');
     if (selectedDate) {
@@ -298,7 +315,6 @@ export default function ReportsScreen({ navigation }: Props) {
     }
   };
 
-  // Reset filters
   const handleResetFilters = () => {
     setFilters({
       dateRange: 'all',
@@ -312,12 +328,10 @@ export default function ReportsScreen({ navigation }: Props) {
     });
   };
 
-  // Apply filters and close modal
   const handleApplyFilters = () => {
     setShowFilterModal(false);
   };
 
-  // Handle download - Navigate to InstantReport
   const handleDownload = (item: any) => {
     console.log('📥 Opening report:', item.report_id);
 
@@ -343,7 +357,6 @@ export default function ReportsScreen({ navigation }: Props) {
     navigation.navigate('Report', { data: reportData });
   };
 
-  // Format date for display
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-GB', {
@@ -353,7 +366,6 @@ export default function ReportsScreen({ navigation }: Props) {
     });
   };
 
-  // Format time for display
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString('en-US', {
@@ -363,7 +375,6 @@ export default function ReportsScreen({ navigation }: Props) {
     });
   };
 
-  // Format date for date picker display
   const formatDateForPicker = (date: Date | null) => {
     if (!date) return 'Select Date';
     return date.toLocaleDateString('en-GB', {
@@ -373,17 +384,41 @@ export default function ReportsScreen({ navigation }: Props) {
     });
   };
 
+  // ✅ UPDATED: Conditional header rendering
+  const renderHeader = () => (
+    <View style={styles.header}>
+      {/* ✅ Conditional left button */}
+      {isFromStack ? (
+        // Stack navigation - Show back arrow
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+          <ArrowLeft size={24} color="#FAFAFA" />
+        </TouchableOpacity>
+      ) : (
+        // Tab navigation - Show menu icon
+        <TouchableOpacity onPress={handleMenuToggle} style={styles.backButton}>
+          <Menu size={24} color="#FAFAFA" />
+        </TouchableOpacity>
+      )}
+      
+      <Text style={styles.headerTitle}>Medical Reports</Text>
+      <View style={styles.placeholder} />
+    </View>
+  );
+
   // Render loading state
   if (isLoading && reports.length === 0) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <ArrowLeft size={24} color="#FAFAFA" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Medical Reports</Text>
-          <View style={styles.placeholder} />
-        </View>
+        {/* ✅ NEW: Drawer for tab navigation */}
+        {isFromTab && (
+          <AppDrawer
+            open={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            navigation={navigation}
+          />
+        )}
+
+        {renderHeader()}
 
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#F59E0B" />
@@ -397,19 +432,22 @@ export default function ReportsScreen({ navigation }: Props) {
   if (error && reports.length === 0) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <ArrowLeft size={24} color="#FAFAFA" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Medical Reports</Text>
-          <View style={styles.placeholder} />
-        </View>
+        {/* ✅ NEW: Drawer for tab navigation */}
+        {isFromTab && (
+          <AppDrawer
+            open={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            navigation={navigation}
+          />
+        )}
+
+        {renderHeader()}
 
         <View style={styles.centerContainer}>
-          <Text style={styles.errorText}>❌ {error}</Text>
+          <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity
             style={styles.retryBtn}
-            onPress={() => dispatch(fetchReports())}
+            onPress={loadReports}
           >
             <Text style={styles.retryText}>Retry</Text>
           </TouchableOpacity>
@@ -422,13 +460,16 @@ export default function ReportsScreen({ navigation }: Props) {
   if (reports.length === 0) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <ArrowLeft size={24} color="#FAFAFA" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Medical Reports</Text>
-          <View style={styles.placeholder} />
-        </View>
+        {/* ✅ NEW: Drawer for tab navigation */}
+        {isFromTab && (
+          <AppDrawer
+            open={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            navigation={navigation}
+          />
+        )}
+
+        {renderHeader()}
 
         <View style={styles.centerContainer}>
           <Text style={styles.emptyText}>📄 No reports found</Text>
@@ -442,14 +483,17 @@ export default function ReportsScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <ArrowLeft size={24} color="#FAFAFA" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Medical Reports</Text>
-        <View style={styles.placeholder} />
-      </View>
+      {/* ✅ NEW: Drawer for tab navigation */}
+      {isFromTab && (
+        <AppDrawer
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          navigation={navigation}
+        />
+      )}
+
+      {/* ✅ UPDATED: Use renderHeader function */}
+      {renderHeader()}
 
       {/* Search Bar and Filter Section */}
       <View style={styles.searchContainer}>

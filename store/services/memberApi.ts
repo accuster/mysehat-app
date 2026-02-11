@@ -1,10 +1,17 @@
 // store/services/memberApi.ts
-import axios, { AxiosInstance } from 'axios';
+// ✅ UPDATED: Using global apiClient for consistent error handling
+// ✅ FIXED: FormData upload now includes network check and proper error handling
+import {
+  apiClient,
+  NetworkError,
+  ApiError,
+  networkManager,
+} from '../../utils/apiClient';
 import { storage } from '../../utils/storage';
+import axios from 'axios';
 import { API_BASE_URL } from '../constant';
 
-
-// ✅ UPDATED: Member type with email and profileImage
+// ✅ Types remain the same
 export interface Member {
   id: string;
   name: string;
@@ -29,15 +36,12 @@ export interface UpdateMemberRequest {
   gender?: 'Male' | 'Female' | 'Other';
 }
 
-// ============================================================================
-// ✅ NEW: Profile Update Types with File Support
-// ============================================================================
 export interface UpdateProfileRequest {
   fullName?: string;
   email?: string | null;
   age?: number;
   gender?: 'Male' | 'Female' | 'Other';
-  profileImage?: string | null; // File URI from image picker
+  profileImage?: string | null;
 }
 
 export interface UpdateProfileResponse {
@@ -52,129 +56,51 @@ export interface UpdateProfileResponse {
 }
 
 class MemberApiService {
-  private api: AxiosInstance;
-
-  constructor() {
-    this.api = axios.create({
-      baseURL: API_BASE_URL,
-      timeout: 30000, // Increased timeout for file uploads
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    // Add request interceptor to attach token
-    this.api.interceptors.request.use(
-      async config => {
-        const token = await storage.getToken();
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-      },
-      error => {
-        return Promise.reject(error);
-      },
-    );
-
-    // Add response interceptor for error handling
-    this.api.interceptors.response.use(
-      response => response,
-      async error => {
-        const originalRequest = error.config;
-
-        // If token expired, try to refresh
-        if (error.response?.status === 401 && !originalRequest._retry) {
-          originalRequest._retry = true;
-
-          try {
-            const refreshToken = await storage.getRefreshToken();
-            if (refreshToken) {
-              // Call refresh token endpoint (from authApi)
-              const response = await axios.post(
-                `${API_BASE_URL}/wa-auth/refresh-token`,
-                {
-                  refreshToken,
-                },
-              );
-
-              const newToken = response.data.accessToken;
-              await storage.saveToken(newToken);
-              originalRequest.headers.Authorization = `Bearer ${newToken}`;
-              return this.api(originalRequest);
-            }
-          } catch (refreshError) {
-            // Refresh failed, logout user
-            await storage.clearAuth();
-            return Promise.reject(refreshError);
-          }
-        }
-
-        return Promise.reject(error);
-      },
-    );
-  }
-
   /**
    * Get all family members
    */
   async getAllMembers(): Promise<Member[]> {
-    try {
-      console.log('📋 Fetching all family members...');
-      console.log('URL:', `${API_BASE_URL}/members`);
+    console.log('📋 Fetching all family members...');
 
-      const response = await this.api.get<{
-        success: boolean;
-        count: number;
-        members: Member[];
-      }>('/members');
+    const response = await apiClient.get<{
+      success: boolean;
+      count: number;
+      members: Member[];
+    }>('/members');
 
-      console.log('✅ Members fetched:', response.data.count);
-      return response.data.members;
-    } catch (error: any) {
-      console.log('❌ Error fetching members:', error.message);
-      console.log('Error details:', error.response?.data);
-      throw this.handleError(error);
-    }
+    console.log('✅ Members fetched:', response.count);
+    return response.members;
   }
 
   /**
    * Create new family member
    */
   async createMember(data: CreateMemberRequest): Promise<Member> {
-    try {
-      console.log('➕ Creating family member:', data.name);
-      const response = await this.api.post<{
-        success: boolean;
-        message: string;
-        member: Member;
-      }>('/members', data);
+    console.log('➕ Creating family member:', data.name);
 
-      console.log('✅ Member created:', response.data.member.id);
-      return response.data.member;
-    } catch (error: any) {
-      console.log('❌ Error creating member:', error.message);
-      throw this.handleError(error);
-    }
+    const response = await apiClient.post<{
+      success: boolean;
+      message: string;
+      member: Member;
+    }>('/members', data);
+
+    console.log('✅ Member created:', response.member.id);
+    return response.member;
   }
 
   /**
    * Get member by ID
    */
   async getMemberById(id: string): Promise<Member> {
-    try {
-      console.log('🔍 Fetching member:', id);
-      const response = await this.api.get<{
-        success: boolean;
-        member: Member;
-      }>(`/members/${id}`);
+    console.log('🔍 Fetching member:', id);
 
-      console.log('✅ Member fetched:', response.data.member.name);
-      return response.data.member;
-    } catch (error: any) {
-      console.log('❌ Error fetching member:', error.message);
-      throw this.handleError(error);
-    }
+    const response = await apiClient.get<{
+      success: boolean;
+      member: Member;
+    }>(`/members/${id}`);
+
+    console.log('✅ Member fetched:', response.member.name);
+    return response.member;
   }
 
   /**
@@ -182,144 +108,117 @@ class MemberApiService {
    * Endpoint: GET /api/profile
    */
   async getMyProfile(): Promise<Member> {
-    try {
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('👤 API: Fetching my profile');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('👤 API: Fetching my profile');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-      const response = await this.api.get<{
-        success: boolean;
-        profile: Member;
-      }>('/profile');
+    const response = await apiClient.get<{
+      success: boolean;
+      profile: Member;
+    }>('/profile');
 
-      console.log('✅ Profile fetched:', response.data.profile.name);
-      return response.data.profile;
-    } catch (error: any) {
-      console.log('❌ Error fetching profile:', error.message);
-      throw this.handleError(error);
-    }
+    console.log('✅ Profile fetched:', response.profile.name);
+    return response.profile;
   }
 
   /**
    * Update family member
    */
   async updateMember(id: string, data: UpdateMemberRequest): Promise<Member> {
-    try {
-      console.log('✏️ Updating member:', id);
-      const response = await this.api.put<{
-        success: boolean;
-        message: string;
-        member: Member;
-      }>(`/members/${id}`, data);
+    console.log('✏️ Updating member:', id);
 
-      console.log('✅ Member updated:', response.data.member.name);
-      return response.data.member;
-    } catch (error: any) {
-      console.log('❌ Error updating member:', error.message);
-      throw this.handleError(error);
-    }
+    const response = await apiClient.put<{
+      success: boolean;
+      message: string;
+      member: Member;
+    }>(`/members/${id}`, data);
+
+    console.log('✅ Member updated:', response.member.name);
+    return response.member;
   }
 
   /**
    * Delete family member
    */
   async deleteMember(id: string): Promise<void> {
-    try {
-      console.log('🗑️ Deleting member:', id);
-      await this.api.delete(`/members/${id}`);
-      console.log('✅ Member deleted');
-    } catch (error: any) {
-      console.log('❌ Error deleting member:', error.message);
-      throw this.handleError(error);
-    }
+    console.log('🗑️ Deleting member:', id);
+
+    await apiClient.delete(`/members/${id}`);
+
+    console.log('✅ Member deleted');
   }
 
-  // ============================================================================
-  // ✅ NEW: Update Profile with File Upload (FormData)
-  // ============================================================================
   /**
-   * Update logged-in user's profile
-   * Endpoint: PUT /api/profile
-   * Uses FormData to upload profile image file
+   * Update logged-in user's profile with file upload
+   * ✅ FIXED: Now includes network check and proper error handling
+   * Uses FormData for multipart/form-data upload
    */
   async updateProfile(
     data: UpdateProfileRequest,
   ): Promise<UpdateProfileResponse> {
-    try {
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('👤 API: Updating profile with file upload');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log(
-        'Request data:',
-        JSON.stringify(
-          { ...data, profileImage: data.profileImage ? 'FILE' : null },
-          null,
-          2,
-        ),
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('👤 API: Updating profile with file upload');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    // ✅ 1. CHECK NETWORK CONNECTIVITY FIRST
+    const isOnline = await networkManager.checkConnectivity();
+    if (!isOnline) {
+      console.log('❌ No internet connection - aborting profile update');
+      throw new NetworkError(
+        'No internet connection. Please check your WiFi or mobile data.',
+        true,
       );
+    }
 
-      // ✅ Create FormData for multipart/form-data upload
-      const formData = new FormData();
+    // ✅ 2. CREATE FORMDATA
+    const formData = new FormData();
 
-      // Add text fields
-      if (data.fullName !== undefined) {
-        formData.append('fullName', data.fullName);
-      }
+    if (data.fullName !== undefined) {
+      formData.append('fullName', data.fullName);
+    }
+    if (data.email !== undefined && data.email !== null) {
+      formData.append('email', data.email);
+    }
+    if (data.age !== undefined) {
+      formData.append('age', data.age.toString());
+    }
+    if (data.gender !== undefined) {
+      formData.append('gender', data.gender);
+    }
 
-      if (data.email !== undefined && data.email !== null) {
-        formData.append('email', data.email);
-      }
+    // Add profile image file
+    if (data.profileImage && data.profileImage !== null) {
+      const uriParts = data.profileImage.split('/');
+      const filename = uriParts[uriParts.length - 1];
+      const extension = filename.split('.').pop()?.toLowerCase();
 
-      if (data.age !== undefined) {
-        formData.append('age', data.age.toString());
-      }
+      let mimeType = 'image/jpeg';
+      if (extension === 'png') mimeType = 'image/png';
+      else if (extension === 'jpg' || extension === 'jpeg')
+        mimeType = 'image/jpeg';
+      else if (extension === 'gif') mimeType = 'image/gif';
+      else if (extension === 'webp') mimeType = 'image/webp';
 
-      if (data.gender !== undefined) {
-        formData.append('gender', data.gender);
-      }
+      const file = {
+        uri: data.profileImage,
+        type: mimeType,
+        name: filename || 'profile.jpg',
+      } as any;
 
-      // ✅ Add profile image file (if provided)
-      if (data.profileImage && data.profileImage !== null) {
-        // Extract filename from URI
-        const uriParts = data.profileImage.split('/');
-        const filename = uriParts[uriParts.length - 1];
+      formData.append('profileImage', file);
+      console.log('📎 Appending image file:', file.name);
+    }
 
-        // Determine MIME type from file extension
-        const extension = filename.split('.').pop()?.toLowerCase();
-        let mimeType = 'image/jpeg'; // Default
+    // ✅ 3. GET TOKEN
+    const token = await storage.getToken();
+    if (!token) {
+      console.log('❌ No authentication token found');
+      throw new ApiError('No authentication token found', 401, false);
+    }
 
-        if (extension === 'png') {
-          mimeType = 'image/png';
-        } else if (extension === 'jpg' || extension === 'jpeg') {
-          mimeType = 'image/jpeg';
-        } else if (extension === 'gif') {
-          mimeType = 'image/gif';
-        } else if (extension === 'webp') {
-          mimeType = 'image/webp';
-        }
-
-        // ✅ Create file object for upload
-        const file = {
-          uri: data.profileImage,
-          type: mimeType,
-          name: filename || 'profile.jpg',
-        } as any;
-
-        formData.append('profileImage', file);
-
-        console.log('📎 Appending image file:', {
-          name: file.name,
-          type: file.type,
-          uri: file.uri.substring(0, 50) + '...',
-        });
-      }
-
-      // Get token for Authorization header
-      const token = await storage.getToken();
-
-      console.log('📤 Sending FormData request...');
-
-      // ✅ Send FormData with multipart/form-data
+    try {
+      // ✅ 4. MAKE REQUEST WITH PROPER ERROR HANDLING
+      console.log('📤 Sending profile update request...');
       const response = await axios.put<{
         success: boolean;
         message: string;
@@ -327,38 +226,72 @@ class MemberApiService {
       }>(`${API_BASE_URL}/profile`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
-          Authorization: token ? `Bearer ${token}` : '',
+          Authorization: `Bearer ${token}`,
         },
-        timeout: 30000, // 30 second timeout for file upload
+        timeout: 30000,
       });
 
       console.log('✅ Profile updated successfully');
-      console.log('Updated data:', response.data.data);
-
       return response.data.data;
     } catch (error: any) {
-      console.log('❌ Error updating profile:', error.message);
-      console.log('Error details:', error.response?.data);
-      throw this.handleError(error);
+      console.log('❌ Profile update failed:', error.message);
+
+      // ✅ 5. HANDLE ERRORS PROPERLY
+      if (axios.isAxiosError(error)) {
+        // Network error (no response)
+        if (!error.response) {
+          console.log('⚠️ Network error - no response from server');
+          throw new NetworkError(
+            'Unable to reach server. Please check your internet connection.',
+            true,
+          );
+        }
+
+        // HTTP error (got response)
+        const status = error.response.status;
+        const errorData = error.response.data as any; // ✅ RENAMED from 'data' to 'errorData'
+
+        // Extract error message
+        const errorMessage =
+          errorData?.message ||
+          errorData?.error ||
+          this.getDefaultErrorMessage(status);
+
+        console.log(`⚠️ HTTP ${status} error:`, errorMessage);
+        throw new ApiError(errorMessage, status, status >= 500);
+      }
+
+      // Unknown error
+      console.log('⚠️ Unknown error type:', error);
+      throw new ApiError(
+        'An unexpected error occurred. Please try again.',
+        undefined,
+        false,
+      );
     }
   }
 
   /**
-   * Handle API errors
+   * Helper: Get default error message based on status code
    */
-  private handleError(error: any): Error {
-    if (error.response) {
-      // Server responded with error
-      const message = error.response.data?.message || 'An error occurred';
-      return new Error(message);
-    } else if (error.request) {
-      // Request made but no response
-      return new Error(
-        'No response from server. Please check your connection.',
-      );
-    } else {
-      // Something else happened
-      return new Error(error.message || 'An unexpected error occurred');
+  private getDefaultErrorMessage(status: number): string {
+    switch (status) {
+      case 400:
+        return 'Invalid request. Please check your input.';
+      case 401:
+        return 'Your session has expired. Please login again.';
+      case 403:
+        return 'You do not have permission to perform this action.';
+      case 404:
+        return 'The requested resource was not found.';
+      case 413:
+        return 'File size too large. Please choose a smaller image.';
+      case 500:
+        return 'Server error. Please try again later.';
+      case 503:
+        return 'Service temporarily unavailable. Please try again.';
+      default:
+        return 'An unexpected error occurred. Please try again.';
     }
   }
 }
