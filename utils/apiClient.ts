@@ -1,6 +1,10 @@
 // utils/apiClient.ts
-// 🌐 GLOBAL API CLIENT - Single source of truth for all API calls
-import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
+// 🌐 GLOBAL API CLIENT - FIXED: Token rotation + proper refresh token save + partner token override fix
+import axios, {
+  AxiosInstance,
+  AxiosError,
+  InternalAxiosRequestConfig,
+} from 'axios';
 import NetInfo from '@react-native-community/netinfo';
 import { storage } from './storage';
 import { API_BASE_URL } from '../store/constant';
@@ -20,13 +24,39 @@ export class NetworkError extends Error {
  */
 export class ApiError extends Error {
   constructor(
-    message: string, 
+    message: string,
     public statusCode?: number,
-    public isRetryable: boolean = false
+    public isRetryable: boolean = false,
   ) {
     super(message);
     this.name = 'ApiError';
   }
+}
+
+/**
+ * Session expired error - Triggers automatic logout
+ */
+export class SessionExpiredError extends Error {
+  constructor(message: string = 'Session expired') {
+    super(message);
+    this.name = 'SessionExpiredError';
+  }
+}
+
+/**
+ * Global session expired callback
+ * Set from App.tsx to handle logout
+ */
+let globalSessionExpiredHandler: (() => void) | null = null;
+
+export function setGlobalSessionExpiredHandler(handler: () => void) {
+  console.log('🔧 Setting global session expired handler');
+  globalSessionExpiredHandler = handler;
+}
+
+export function clearGlobalSessionExpiredHandler() {
+  console.log('🔧 Clearing global session expired handler');
+  globalSessionExpiredHandler = null;
 }
 
 /**
@@ -41,29 +71,33 @@ class NetworkManager {
   }
 
   private initialize() {
-    // Listen for network state changes
     NetInfo.addEventListener(state => {
       const wasOnline = this.isOnline;
-      this.isOnline = state.isConnected === true && state.isInternetReachable !== false;
-      
-      // Notify listeners if state changed
+      this.isOnline =
+        state.isConnected === true && state.isInternetReachable !== false;
+
       if (wasOnline !== this.isOnline) {
-        console.log(`📡 Network state changed: ${this.isOnline ? 'ONLINE' : 'OFFLINE'}`);
+        console.log(
+          `📡 Network state changed: ${this.isOnline ? 'ONLINE' : 'OFFLINE'}`,
+        );
         this.notifyListeners();
       }
     });
 
-    // Check initial state
     NetInfo.fetch().then(state => {
-      this.isOnline = state.isConnected === true && state.isInternetReachable !== false;
-      console.log(`📡 Initial network state: ${this.isOnline ? 'ONLINE' : 'OFFLINE'}`);
+      this.isOnline =
+        state.isConnected === true && state.isInternetReachable !== false;
+      console.log(
+        `📡 Initial network state: ${this.isOnline ? 'ONLINE' : 'OFFLINE'}`,
+      );
     });
   }
 
   public async checkConnectivity(): Promise<boolean> {
     try {
       const state = await NetInfo.fetch();
-      this.isOnline = state.isConnected === true && state.isInternetReachable !== false;
+      this.isOnline =
+        state.isConnected === true && state.isInternetReachable !== false;
       return this.isOnline;
     } catch (error) {
       console.log('⚠️ Error checking network:', error);
@@ -85,11 +119,10 @@ class NetworkManager {
   }
 }
 
-// Singleton instance
 export const networkManager = new NetworkManager();
 
 /**
- * Global API Client with smart error handling
+ * Global API Client with proper session handling and token rotation
  */
 class ApiClient {
   private instance: AxiosInstance;
@@ -112,49 +145,63 @@ class ApiClient {
   }
 
   private setupInterceptors() {
-    // ✅ REQUEST INTERCEPTOR
+    // ─── REQUEST INTERCEPTOR ──────────────────────────────────────────────
     this.instance.interceptors.request.use(
       async (config: InternalAxiosRequestConfig) => {
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         console.log('📤 API REQUEST');
         console.log('URL:', config.url);
         console.log('Method:', config.method?.toUpperCase());
-        
-        // 1. Check network connectivity BEFORE making request
+
+        // 1. Check network connectivity
         const isOnline = await networkManager.checkConnectivity();
         if (!isOnline) {
           console.log('❌ No internet connection - aborting request');
           throw new NetworkError(
             'No internet connection. Please check your WiFi or mobile data.',
-            true
+            true,
           );
         }
 
-        // 2. Attach auth token
-        const token = await storage.getToken();
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-          console.log('🔑 Token attached');
+        // 2. Attach auth token — skip if:
+        //    a) This is the refresh token endpoint
+        //    b) Authorization header is ALREADY set by the caller
+        //       e.g. partnerAuthApi.validateToken() sets its own partner token
+        const alreadyHasAuth = !!config.headers?.Authorization;
+
+        if (
+          !config.url?.includes('/wa-auth/refresh-token') &&
+          !alreadyHasAuth
+        ) {
+          const token = await storage.getToken();
+          if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+            console.log('🔑 Token attached');
+          }
+        } else if (alreadyHasAuth) {
+          console.log('🔑 Token already set by caller — skipping override');
         }
 
         return config;
       },
-      (error) => {
+      error => {
         console.log('❌ Request interceptor error:', error);
         return Promise.reject(error);
-      }
+      },
     );
 
-    // ✅ RESPONSE INTERCEPTOR
+    // ─── RESPONSE INTERCEPTOR ─────────────────────────────────────────────
     this.instance.interceptors.response.use(
-      (response) => {
+      response => {
         console.log('✅ API SUCCESS');
         console.log('Status:', response.status);
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         return response;
       },
       async (error: AxiosError) => {
-        const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+        const originalRequest = error.config as InternalAxiosRequestConfig & {
+          _retry?: boolean;
+        };
 
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         console.log('❌ API ERROR');
@@ -162,22 +209,40 @@ class ApiClient {
         console.log('Status:', error.response?.status);
         console.log('Message:', error.message);
 
-        // Handle different error types
+        // Handle network errors (no response from server)
         if (!error.response) {
-          // Network error (no response from server)
           console.log('⚠️ Network error - no response received');
           throw new NetworkError(
             'Unable to reach server. Please check your internet connection.',
-            true
+            true,
           );
         }
 
         const status = error.response.status;
 
-        // Handle 401 Unauthorized - Token expired
-        if (status === 401 && !originalRequest._retry) {
+        // ─── Handle 401 Unauthorized ───────────────────────────────────────
+        if (status === 401 && originalRequest && !originalRequest._retry) {
+          // Don't retry if this IS the refresh token endpoint — session is dead
+          const isRefreshEndpoint = originalRequest.url?.includes(
+            '/wa-auth/refresh-token',
+          );
+          const isPartnerEndpoint =
+            originalRequest.url?.includes('/partner-auth/');
+
+          if (isRefreshEndpoint || isPartnerEndpoint) {
+            console.log(
+              '❌ 401 on refresh/partner endpoint — not attempting refresh',
+            );
+            // Only trigger global session expired handler for USER refresh endpoint
+            if (isRefreshEndpoint) {
+              await this.handleSessionExpired();
+            }
+            throw new SessionExpiredError();
+          }
+
+          // Queue concurrent requests while a refresh is already in progress
           if (this.isRefreshing) {
-            // Queue this request
+            console.log('🔄 Already refreshing — queueing request');
             return new Promise((resolve, reject) => {
               this.failedQueue.push({ resolve, reject });
             })
@@ -192,69 +257,99 @@ class ApiClient {
           this.isRefreshing = true;
 
           try {
-            console.log('🔄 Token expired - attempting refresh...');
+            console.log('🔄 Token expired — attempting refresh...');
             const refreshToken = await storage.getRefreshToken();
-            
+
             if (!refreshToken) {
+              console.log('❌ No refresh token available');
               throw new Error('No refresh token available');
             }
 
-            // Call refresh token endpoint
-            const response = await axios.post(`${API_BASE_URL}/wa-auth/refresh-token`, {
-              refreshToken,
-            });
+            // Use raw axios (not this.instance) to prevent interceptor loop
+            const response = await axios.post(
+              `${API_BASE_URL}/wa-auth/refresh-token`,
+              { refreshToken },
+              {
+                headers: { 'Content-Type': 'application/json' },
+                timeout: 10000,
+              },
+            );
 
-            const newToken = response.data.accessToken;
-            await storage.saveToken(newToken);
+            if (!response.data?.accessToken) {
+              throw new Error('No access token received from refresh');
+            }
 
-            console.log('✅ Token refreshed successfully');
+            const newAccessToken = response.data.accessToken;
 
-            // Process queued requests
-            this.failedQueue.forEach(({ resolve }) => resolve(newToken));
+            // ✅ Save new access token
+            await storage.saveToken(newAccessToken);
+            console.log('✅ New access token saved');
+
+            // ✅ Save rotated refresh token if server returned one
+            if (response.data.refreshToken) {
+              await storage.saveRefreshToken(response.data.refreshToken);
+              console.log('✅ Rotated refresh token saved');
+            }
+
+            console.log('✅ Token refresh successful');
+
+            // Flush queued requests with new token
+            this.failedQueue.forEach(({ resolve }) => resolve(newAccessToken));
             this.failedQueue = [];
 
-            // Retry original request
-            originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            // Retry the original failed request with new token
+            originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
             return this.instance(originalRequest);
-          } catch (refreshError) {
-            console.log('❌ Token refresh failed');
-            
-            // Clear auth and reject queued requests
-            await storage.clearAuth();
+          } catch (refreshError: any) {
+            console.log('❌ Token refresh failed:', refreshError.message);
+
+            // Reject all queued requests
             this.failedQueue.forEach(({ reject }) => reject(refreshError));
             this.failedQueue = [];
 
-            throw new ApiError(
-              'Your session has expired. Please login again.',
-              401,
-              false
-            );
+            await this.handleSessionExpired();
+            throw new SessionExpiredError();
           } finally {
             this.isRefreshing = false;
           }
         }
 
-        // Handle other HTTP errors
+        // ─── Handle other HTTP errors ──────────────────────────────────────
         const errorMessage = this.extractErrorMessage(error);
-        
         throw new ApiError(
           errorMessage,
           status,
-          status >= 500 // Server errors are retryable
+          status >= 500, // Server errors are retryable
         );
-      }
+      },
     );
+  }
+
+  /**
+   * Handle session expiration — clear storage and notify app
+   */
+  private async handleSessionExpired() {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🔒 SESSION EXPIRED - CLEANING UP');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    await storage.clearAuth();
+
+    if (globalSessionExpiredHandler) {
+      console.log('📢 Calling global session expired handler');
+      globalSessionExpiredHandler();
+    } else {
+      console.log('⚠️ No global session expired handler registered!');
+    }
   }
 
   private extractErrorMessage(error: AxiosError): string {
     const data = error.response?.data as any;
-    
+
     if (data?.message) return data.message;
     if (data?.error) return data.error;
-    
-    // Default messages based on status code
-    const status = error.response?.status;
-    switch (status) {
+
+    switch (error.response?.status) {
       case 400:
         return 'Invalid request. Please check your input.';
       case 403:
@@ -270,56 +365,45 @@ class ApiClient {
     }
   }
 
-  /**
-   * Make a GET request
-   */
+  // ─── HTTP Methods ──────────────────────────────────────────────────────
+
   public async get<T = any>(url: string, config?: any): Promise<T> {
     const response = await this.instance.get<T>(url, config);
     return response.data;
   }
 
-  /**
-   * Make a POST request
-   */
-  public async post<T = any>(url: string, data?: any, config?: any): Promise<T> {
+  public async post<T = any>(
+    url: string,
+    data?: any,
+    config?: any,
+  ): Promise<T> {
     const response = await this.instance.post<T>(url, data, config);
     return response.data;
   }
 
-  /**
-   * Make a PUT request
-   */
   public async put<T = any>(url: string, data?: any, config?: any): Promise<T> {
     const response = await this.instance.put<T>(url, data, config);
     return response.data;
   }
 
-  /**
-   * Make a PATCH request
-   */
-  public async patch<T = any>(url: string, data?: any, config?: any): Promise<T> {
+  public async patch<T = any>(
+    url: string,
+    data?: any,
+    config?: any,
+  ): Promise<T> {
     const response = await this.instance.patch<T>(url, data, config);
     return response.data;
   }
 
-  /**
-   * Make a DELETE request
-   */
   public async delete<T = any>(url: string, config?: any): Promise<T> {
     const response = await this.instance.delete<T>(url, config);
     return response.data;
   }
 
-  /**
-   * Get raw axios instance for advanced usage
-   */
   public getAxiosInstance(): AxiosInstance {
     return this.instance;
   }
 }
 
-// Export singleton instance
 export const apiClient = new ApiClient();
-
-// Export default axios instance for backward compatibility
 export default apiClient.getAxiosInstance();

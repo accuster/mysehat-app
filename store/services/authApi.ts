@@ -96,14 +96,9 @@ class AuthApiService {
       await apiClient.post('/wa-auth/logout');
       console.log('✅ Logout API call successful');
     } catch (error) {
-      // Even if API fails, we still want to clear local storage
+      console.log('❌ Logout API call failed:', error);
       console.log('⚠️ Logout API failed, but continuing with local cleanup');
-    } finally {
-      // Always clear local auth data
-      await storage.clearAuth();
-      console.log('✅ Local auth data cleared');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    }
+    } 
   }
 }
 

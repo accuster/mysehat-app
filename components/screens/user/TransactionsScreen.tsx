@@ -23,8 +23,6 @@ import {
 import { useAppDispatch, useAppSelector } from '../../../store/hook';
 import { fetchTransactions } from '../../../store/slices/transactionSlice';
 import {
-  ArrowDownLeft,
-  ArrowUpRight,
   ArrowLeft,
   Search,
   SlidersHorizontal,
@@ -32,9 +30,10 @@ import {
   Calendar,
   CreditCard,
   DollarSign,
-  Menu, // ✅ NEW: Import Menu icon
+  Menu, 
+  ReceiptIndianRupee,
 } from 'lucide-react-native';
-import { useRoute } from '@react-navigation/native'; // ✅ NEW: Import useRoute
+import { useRoute } from '@react-navigation/native'; 
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { useApiErrorHandler } from '../../../hooks/useApiErrorHandler';
@@ -50,7 +49,7 @@ type FilterOptions = {
   dateRange: 'all' | 'today' | 'week' | 'month' | 'year' | 'custom';
   startDate: Date | null;
   endDate: Date | null;
-  paymentMethod: 'all' | 'UPI' | 'Razorpay' | 'Card' | 'NetBanking' | 'Wallet';
+  paymentMethod: 'all' | 'UPI' | 'Card' | 'NetBanking' | 'Wallet';
   amountMin: string;
   amountMax: string;
 };
@@ -519,11 +518,10 @@ export default function TransactionsScreen({ navigation }: Props) {
               const paymentMethod = item.payment_method || 'Unknown';
               const isCredit =
                 paymentMethod === 'UPI' ||
-                paymentMethod === 'Razorpay' ||
                 paymentMethod === 'Card' ||
                 paymentMethod === 'NetBanking';
 
-              const Icon = isCredit ? ArrowDownLeft : ArrowUpRight;
+              const Icon = ReceiptIndianRupee;
               const title = 'BMI Report Purchase';
               const iconColor = isCredit ? '#10B981' : '#F59E0B';
               const iconBg = isCredit
@@ -659,7 +657,6 @@ export default function TransactionsScreen({ navigation }: Props) {
                     { label: 'All Methods', value: 'all' },
                     { label: 'UPI', value: 'UPI' },
                     { label: 'Card', value: 'Card' },
-                    { label: 'Razorpay', value: 'Razorpay' },
                     { label: 'Net Banking', value: 'NetBanking' },
                     { label: 'Wallet', value: 'Wallet' },
                   ].map(option => (

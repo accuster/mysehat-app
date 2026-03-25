@@ -4,6 +4,7 @@
     <!-- ============================================================ -->
     <!-- GOOGLE PLAY CONSOLE COMPLIANT PERMISSIONS -->
     <!-- ✅ Storage permissions added for PDF downloads (Android 11 and below only) -->
+    <!-- ✅ Bluetooth permissions added for BMI Kiosk recharge feature -->
     <!-- ============================================================ -->
 
     <!-- UPI Payment Apps Query -->
@@ -24,17 +25,44 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-permission android:name="android.permission.FLASHLIGHT" />
-    
+
     <!-- Notifications -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- ✅ NEW: Storage permissions for saving PDFs to Downloads folder -->
+    <!-- ✅ Storage permissions for saving PDFs to Downloads folder -->
     <!-- maxSdkVersion="32" means these permissions are NOT required on Android 13+ -->
-    <!-- This keeps your app Google Play compliant while supporting older Android versions -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+
+    <!-- ============================================================ -->
+    <!-- ✅ BLUETOOTH PERMISSIONS – BMI Kiosk Recharge (Classic BT)  -->
+    <!-- ============================================================ -->
+
+    <!-- Android 11 and below – needed to find & connect to paired devices -->
+    <uses-permission android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+
+    <!-- Android 6–11 – needed to discover nearby BT devices -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"
+        android:maxSdkVersion="30" />
+
+    <!-- Android 12+ (API 31+) – granular BT permissions replacing the above -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"
+        android:minSdkVersion="31" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:minSdkVersion="31"
+        tools:remove="android:usesPermissionFlags" />
+
+    <!-- Declare that this app uses Classic Bluetooth (not BLE only) -->
+    <uses-feature android:name="android.hardware.bluetooth"
+        android:required="false" />
+    <!-- ============================================================ -->
 
     <application
       android:name=".MainApplication"

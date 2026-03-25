@@ -4,8 +4,6 @@ import { Text, StyleSheet, Alert, Linking } from 'react-native';
 import { useDispatch } from 'react-redux';
 import { AppDispatch } from '../../store';
 import { logout } from '../../store/slices/authSlice';
-import { partnerLogout } from '../../store/slices/partnerAuthSlice';
-import { useAppSelector } from '../../store/hook';
 
 import Drawer from './Drawer';
 import DrawerHeader from './drawer/DrawerHeader';
@@ -19,7 +17,7 @@ import {
   ShieldCheck,
   ArrowLeftRight,
   CircleUserRound,
-  Zap,
+  Zap,           // ✅ Recharge icon
 } from 'lucide-react-native';
 
 interface AppDrawerProps {
@@ -31,36 +29,23 @@ interface AppDrawerProps {
 const AppDrawer: React.FC<AppDrawerProps> = ({ open, onClose, navigation }) => {
   const dispatch = useDispatch<AppDispatch>();
 
-  // ── Detect active role from Redux ─────────────────────────────────────────
-  const isPartner = useAppSelector(s => s.partnerAuth.isAuthenticated);
-  const partnerToken = useAppSelector(s => s.partnerAuth.token);
-
-  // ── Navigation map differs by role ────────────────────────────────────────
-  const userScreenMap: Record<string, string> = {
-    Reports: 'ReportsStack',
-    Transactions: 'TransactionsStack',
-    Profile: 'Profile',
-    Support: 'Support',
-  };
-
-  const partnerScreenMap: Record<string, string> = {
-    Reports: 'PartnerDashboard', // Partner sees reports inside dashboard
-    Transactions: 'PartnerTransactions', // ✅ Partner transactions screen
-    Recharge: 'RechargeStack',
-    Profile: 'PartnerDashboard', // TODO: swap to PartnerProfile screen when ready
-    Support: 'Support',
-  };
-
   const handleNavigation = (screen: string, params?: any) => {
     onClose();
-    const map = isPartner ? partnerScreenMap : userScreenMap;
-    const target = map[screen] || screen;
-    console.log(
-      `📍 AppDrawer [${
-        isPartner ? 'partner' : 'user'
-      }]: "${screen}" → "${target}"`,
-    );
-    params ? navigation.navigate(target, params) : navigation.navigate(target);
+
+    const screenMap: { [key: string]: string } = {
+      'Reports':      'ReportsStack',
+      'Transactions': 'TransactionsStack',
+      'Recharge':     'RechargeStack',   // ✅ Added
+      'Profile':      'Profile',
+      'Support':      'Support',
+    };
+
+    const targetScreen = screenMap[screen] || screen;
+    console.log(`📍 AppDrawer: Navigating from "${screen}" to "${targetScreen}"`);
+
+    params
+      ? navigation.navigate(targetScreen, params)
+      : navigation.navigate(targetScreen);
   };
 
   const handleOpenURL = async (url: string, title: string) => {
@@ -70,10 +55,7 @@ const AppDrawer: React.FC<AppDrawerProps> = ({ open, onClose, navigation }) => {
       if (supported) {
         await Linking.openURL(url);
       } else {
-        Alert.alert(
-          'Error',
-          `Cannot open ${title}. Please check your internet connection.`,
-        );
+        Alert.alert('Error', `Cannot open ${title}. Please check your internet connection.`);
       }
     } catch (error) {
       console.log('Error opening URL:', error);
@@ -81,8 +63,7 @@ const AppDrawer: React.FC<AppDrawerProps> = ({ open, onClose, navigation }) => {
     }
   };
 
-  // ── Logout — dispatches the correct thunk based on role ──────────────────
-  const handleLogout = () => {
+  const handleLogout = async () => {
     onClose();
     Alert.alert('Logout', 'Are you sure you want to logout?', [
       { text: 'Cancel', style: 'cancel' },
@@ -91,17 +72,12 @@ const AppDrawer: React.FC<AppDrawerProps> = ({ open, onClose, navigation }) => {
         style: 'destructive',
         onPress: async () => {
           try {
-            if (isPartner) {
-              console.log('👋 AppDrawer: Partner logout');
-              await dispatch(partnerLogout(partnerToken!)).unwrap();
-            } else {
-              console.log('👋 AppDrawer: User logout');
-              await dispatch(logout()).unwrap();
-            }
-            console.log('✅ Logout successful → Auth');
-          } catch (error) {
-            console.log('⚠️ Logout error (forcing nav anyway):', error);
-          } finally {
+            console.log('🚪 Logout button pressed');
+            await dispatch(logout()).unwrap();
+            console.log('✅ Logout successful, navigating to Auth');
+            navigation.replace('Auth');
+          } catch (error: any) {
+            console.log('❌ Logout error:', error);
             navigation.replace('Auth');
           }
         },
@@ -115,12 +91,7 @@ const AppDrawer: React.FC<AppDrawerProps> = ({ open, onClose, navigation }) => {
       onClose={onClose}
       footer={
         <>
-          <DrawerItem
-            label="Logout"
-            icon={LogOut}
-            danger
-            onPress={handleLogout}
-          />
+          <DrawerItem label="Logout" icon={LogOut} danger onPress={handleLogout} />
           <Text style={styles.versionText}>Version v{packageJson.version}</Text>
         </>
       }
@@ -148,14 +119,12 @@ const AppDrawer: React.FC<AppDrawerProps> = ({ open, onClose, navigation }) => {
         onPress={() => handleNavigation('Transactions')}
       />
 
-      {/* Recharge — Partner only */}
-      {isPartner && (
-        <DrawerItem
-          label="Recharge"
-          icon={Zap}
-          onPress={() => handleNavigation('Recharge')}
-        />
-      )}
+      {/* ✅ Recharge — After Transactions */}
+      <DrawerItem
+        label="Recharge"
+        icon={Zap}
+        onPress={() => handleNavigation('Recharge')}
+      />
 
       {/* Support */}
       <DrawerItem
@@ -169,9 +138,7 @@ const AppDrawer: React.FC<AppDrawerProps> = ({ open, onClose, navigation }) => {
         label="Privacy Policy"
         icon={ShieldCheck}
         external
-        onPress={() =>
-          handleOpenURL('https://mysehat.ai/privacy', 'Privacy Policy')
-        }
+        onPress={() => handleOpenURL('https://mysehat.ai/privacy', 'Privacy Policy')}
       />
 
       {/* Terms & Conditions */}
@@ -179,9 +146,7 @@ const AppDrawer: React.FC<AppDrawerProps> = ({ open, onClose, navigation }) => {
         label="Terms & Conditions"
         icon={FileText}
         external
-        onPress={() =>
-          handleOpenURL('https://mysehat.ai/terms', 'Terms & Conditions')
-        }
+        onPress={() => handleOpenURL('https://mysehat.ai/terms', 'Terms & Conditions')}
       />
     </Drawer>
   );

@@ -8,6 +8,7 @@ import {
   ScrollView,
   Pressable,
   BackHandler,
+  ActivityIndicator,
 } from 'react-native';
 import {
   SafeAreaView,
@@ -16,6 +17,12 @@ import {
 
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../store';
+
+// ✅ Use typed hooks
+import { useAppDispatch, useAppSelector } from '../../../store/hook';
+
+// ✅ Import wallet action
+import { fetchWalletBalance } from '../../../store/slices/walletSlice';
 
 import AppHeader from '../../common/AppHeader';
 import AppDrawer from '../../common/AppDrawer';
@@ -33,138 +40,120 @@ type Props = {
   navigation: any;
 };
 
+const formatINR = (n: number) => {
+  try {
+    return n.toLocaleString('en-IN');
+  } catch {
+    return String(n);
+  }
+};
+
 export default function HomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-
-  // ✅ Add isMounted ref
   const isMounted = useRef(true);
+  const dispatch = useAppDispatch();
 
+  // ── Auth & Members ───────────────────────────────────────────────────────────
   const { members } = useSelector((state: RootState) => state.members);
   const { user } = useSelector((state: RootState) => state.auth);
 
+  // ── Wallet — real data from Redux ────────────────────────────────────────────
+  const { balance, isLoadingBalance } = useAppSelector(s => s.wallet);
+  const walletBalance = balance?.wallet_balance ?? 0;
+  const rewardBalance = balance?.rewards_points ?? 0;
+
+  // ── Local state ──────────────────────────────────────────────────────────────
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [browserOpen, setBrowserOpen] = useState(false);
 
-  // ✅ FIXED: Setup and cleanup (no dependencies to prevent re-runs)
+  // ── Lifecycle ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     isMounted.current = true;
-
     console.log('🏠 HomeScreen: Component mounted');
-
     return () => {
       console.log('🧹 HomeScreen: Unmounting...');
       isMounted.current = false;
-
-      // React will handle cleanup automatically
-      // No need to warn about open modals
     };
-  }, []); // ✅ Empty array = only runs on mount/unmount
+  }, []);
 
-  // ✅ Handle hardware back button
+  // ✅ Fetch wallet balance on mount
+  useEffect(() => {
+    dispatch(fetchWalletBalance());
+  }, [dispatch]);
+
+  // ── Hardware back ─────────────────────────────────────────────────────────────
   useEffect(() => {
     const backAction = () => {
       console.log('⬅️ HARDWARE BACK: HomeScreen');
-
-      // ✅ Priority 1: Close browser if open
       if (browserOpen) {
-        console.log('📱 Closing browser');
-        if (isMounted.current) {
-          setBrowserOpen(false);
-        }
-        return true; // Prevent default back
+        if (isMounted.current) setBrowserOpen(false);
+        return true;
       }
-
-      // ✅ Priority 2: Close drawer if open
       if (drawerOpen) {
-        console.log('🗂️ Closing drawer');
-        if (isMounted.current) {
-          setDrawerOpen(false);
-        }
-        return true; // Prevent default back
+        if (isMounted.current) setDrawerOpen(false);
+        return true;
       }
-
-      // ✅ Priority 3: Allow default back (exit app or go to previous screen)
-      console.log('⬅️ Default back action');
-      return false; // Allow default
+      return false;
     };
-
     const backHandler = BackHandler.addEventListener(
       'hardwareBackPress',
       backAction,
     );
-
     return () => backHandler.remove();
-  }, [drawerOpen, browserOpen]); // ✅ Keep dependencies here for BackHandler;
+  }, [drawerOpen, browserOpen]);
 
-  const superUser = members.find(member => member.userType === 'SuperUser');
+  // ── Derived values ────────────────────────────────────────────────────────────
+  const superUser = members.find(m => m.userType === 'SuperUser');
 
-  // Extract first name only (text before first space)
   const getFirstName = (fullName: string) => {
-    const trimmedName = fullName.trim();
-    const spaceIndex = trimmedName.indexOf(' ');
-    return spaceIndex > 0 ? trimmedName.substring(0, spaceIndex) : trimmedName;
+    const trimmed = fullName.trim();
+    const idx = trimmed.indexOf(' ');
+    return idx > 0 ? trimmed.substring(0, idx) : trimmed;
   };
 
-  // Use SuperUser name if available, otherwise fall back to auth user
   const displayName = superUser
     ? getFirstName(superUser.name)
     : user?.name
     ? getFirstName(user.name)
     : 'User';
 
-  // Mock wallet balance - TODO: Replace with real data from Redux/API
-  const walletBalance = 0;
-  const rewardBalance = 0;
-
-  // ✅ Calculate dynamic bottom padding for ScrollView
   const scrollBottomPadding =
     16 + 56 + 16 + (insets.bottom > 0 ? insets.bottom : 0);
 
-  // ✅ UPDATED: Safe navigation helper with screen mapping
+  // ── Navigation ────────────────────────────────────────────────────────────────
   const handleNavigation = (screen: string) => {
-    if (!isMounted.current) {
-      console.log('⚠️ Component unmounted, aborting navigation');
-      return;
-    }
-
+    if (!isMounted.current) return;
     try {
-      // ✅ Map quick action buttons to stack screens (without bottom tabs)
       const screenMap: { [key: string]: string } = {
-        'ManageMembers': 'ManageMembers',
-        'Transactions': 'TransactionsStack',  // ✅ Navigate to stack version
-        'Reports': 'ReportsStack',            // ✅ Navigate to stack version
-        'Support': 'Support',
-        'Wallet': 'WalletStack',              // ✅ Navigate to stack version
+        ManageMembers: 'ManageMembers',
+        Transactions: 'TransactionsStack',
+        Reports: 'ReportsStack',
+        Support: 'Support',
+        Wallet: 'WalletStack',
       };
-
-      const targetScreen = screenMap[screen] || screen;
-      console.log(`📍 HomeScreen: Navigating from "${screen}" to "${targetScreen}"`);
-      navigation.navigate(targetScreen);
+      const target = screenMap[screen] || screen;
+      console.log(`📍 HomeScreen: Navigating "${screen}" → "${target}"`);
+      navigation.navigate(target);
     } catch (error) {
       console.log('❌ Navigation error:', error);
     }
   };
 
-  // ✅ Safe drawer toggle
   const handleDrawerToggle = (open: boolean) => {
-    if (isMounted.current) {
-      setDrawerOpen(open);
-    }
+    if (isMounted.current) setDrawerOpen(open);
   };
 
+  // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* HEADER */}
       <AppHeader onMenuClick={() => handleDrawerToggle(true)} />
 
-      {/* DRAWER */}
       <AppDrawer
         open={drawerOpen}
         onClose={() => handleDrawerToggle(false)}
         navigation={navigation}
       />
 
-      {/* CONTENT */}
       <ScrollView
         style={styles.content}
         contentContainerStyle={{
@@ -174,7 +163,7 @@ export default function HomeScreen({ navigation }: Props) {
       >
         <Text style={styles.sectionTitle}>👋 Hi, {displayName}!</Text>
 
-        {/* ✅ Wallet Balance Card with Rewards */}
+        {/* ── Wallet Balance Card ────────────────────────────────────────────── */}
         <Pressable
           style={styles.walletBalanceCard}
           onPress={() => handleNavigation('Wallet')}
@@ -192,16 +181,33 @@ export default function HomeScreen({ navigation }: Props) {
           <View style={styles.walletBalanceRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.walletBalanceLabel}>Available Balance</Text>
-              <View style={styles.balanceWithRewards}>
-                <Text style={styles.walletBalanceValue}>₹{walletBalance}</Text>
-                {/* ✅ Rewards Badge */}
-                <View style={styles.rewardsBadge}>
-                  <View style={styles.rewardCoinSmall}>
-                    <Text style={styles.rewardCoinText}>₹</Text>
-                  </View>
-                  <Text style={styles.rewardsText}>+₹{rewardBalance}</Text>
+
+              {isLoadingBalance ? (
+                // ✅ Show spinner while fetching
+                <View style={styles.balanceLoadingRow}>
+                  <ActivityIndicator size="small" color="#A78BFA" />
+                  <Text style={styles.balanceLoadingText}>Loading...</Text>
                 </View>
-              </View>
+              ) : (
+                <View style={styles.balanceWithRewards}>
+                  {/* Total balance */}
+                  <Text style={styles.walletBalanceValue}>
+                    ₹{formatINR(walletBalance)}
+                  </Text>
+
+                  {/* Rewards badge — only show if rewards > 0 */}
+                  {rewardBalance > 0 && (
+                    <View style={styles.rewardsBadge}>
+                      <View style={styles.rewardCoinSmall}>
+                        <Text style={styles.rewardCoinText}>₹</Text>
+                      </View>
+                      <Text style={styles.rewardsText}>
+                        +₹{formatINR(rewardBalance)}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
             </View>
 
             <Pressable
@@ -213,10 +219,10 @@ export default function HomeScreen({ navigation }: Props) {
           </View>
         </Pressable>
 
+        {/* ── Quick Actions ──────────────────────────────────────────────────── */}
         <Text style={styles.quickActionsTitle}>Quick actions</Text>
 
         <View style={styles.grid}>
-          {/* Members Card */}
           <Pressable
             style={styles.actionCard}
             onPress={() => handleNavigation('ManageMembers')}
@@ -228,7 +234,6 @@ export default function HomeScreen({ navigation }: Props) {
             <Text style={styles.actionSubtitle}>Manage family</Text>
           </Pressable>
 
-          {/* Transactions Card */}
           <Pressable
             style={styles.actionCard}
             onPress={() => handleNavigation('Transactions')}
@@ -240,7 +245,6 @@ export default function HomeScreen({ navigation }: Props) {
             <Text style={styles.actionSubtitle}>Payment history</Text>
           </Pressable>
 
-          {/* Reports Card */}
           <Pressable
             style={styles.actionCard}
             onPress={() => handleNavigation('Reports')}
@@ -252,7 +256,6 @@ export default function HomeScreen({ navigation }: Props) {
             <Text style={styles.actionSubtitle}>View reports</Text>
           </Pressable>
 
-          {/* Support Card */}
           <Pressable
             style={styles.actionCard}
             onPress={() => handleNavigation('Support')}
@@ -278,13 +281,8 @@ export default function HomeScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0A0A0A',
-  },
-  content: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: '#0A0A0A' },
+  content: { flex: 1 },
   sectionTitle: {
     fontSize: 20,
     fontWeight: '700',
@@ -292,45 +290,36 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
 
-  // ✅ Wallet Balance Card Styles - More Appealing
   walletBalanceCard: {
-    backgroundColor: '#1A1625', // ✅ Subtle purple-tinted dark background
+    backgroundColor: '#1A1625',
     borderRadius: 20,
     padding: 18,
     marginBottom: 24,
     borderWidth: 1.5,
-    borderColor: '#2D1B4E', // ✅ Soft purple border
+    borderColor: '#2D1B4E',
     shadowColor: '#8B5CF6',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 4,
   },
-  walletHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
+  walletHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   walletIconContainer: {
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: '#251B35', // ✅ Deeper purple background
+    backgroundColor: '#251B35',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  walletTitle: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#F5F3FF', // ✅ Slightly purple-tinted white
-  },
+  walletTitle: { flex: 1, fontSize: 16, fontWeight: '700', color: '#F5F3FF' },
   walletDivider: {
     height: 1,
-    backgroundColor: '#2D1B4E', // ✅ Purple divider
+    backgroundColor: '#2D1B4E',
     marginVertical: 16,
     opacity: 0.6,
   },
+
   walletBalanceRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -338,32 +327,48 @@ const styles = StyleSheet.create({
   },
   walletBalanceLabel: {
     fontSize: 13,
-    color: '#A78BFA', // ✅ Light purple label
+    color: '#A78BFA',
     fontWeight: '600',
     marginBottom: 6,
   },
-  balanceWithRewards: {
+
+  // Loading state
+  balanceLoadingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+    marginBottom: 4,
   },
+  balanceLoadingText: { color: '#71717A', fontSize: 13 },
+
+  balanceWithRewards: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   walletBalanceValue: {
     fontSize: 26,
     fontWeight: '900',
     color: '#FAFAFA',
     letterSpacing: -0.5,
   },
-  // Rewards Badge Styles
+
+  // Cash vs Rewards breakdown row
+  bucketRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  bucketText: { fontSize: 11, color: '#6D28D9', fontWeight: '600' },
+  bucketDot: { fontSize: 11, color: '#3D2B5F' },
+
   rewardsBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: '#251B35', // ✅ Dark purple background
+    backgroundColor: '#251B35',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#3D2B5F', // ✅ Purple border
+    borderColor: '#3D2B5F',
   },
   rewardCoinSmall: {
     width: 18,
@@ -373,18 +378,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rewardCoinText: {
-    color: '#18181B',
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  rewardsText: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: '#10B981',
-  },
+  rewardCoinText: { color: '#18181B', fontSize: 11, fontWeight: '900' },
+  rewardsText: { fontSize: 13, fontWeight: '900', color: '#10B981' },
+
   addBalanceBtn: {
-    backgroundColor: '#2D1B4E', // ✅ Purple-tinted button
+    backgroundColor: '#2D1B4E',
     paddingHorizontal: 15,
     paddingVertical: 10,
     borderRadius: 14,
@@ -392,11 +390,7 @@ const styles = StyleSheet.create({
     borderColor: '#3D2B5F',
     marginBottom: -14,
   },
-  addBalanceText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#E9D5FF', // ✅ Light purple text
-  },
+  addBalanceText: { fontSize: 14, fontWeight: '700', color: '#E9D5FF' },
 
   quickActionsTitle: {
     fontSize: 20,
@@ -405,12 +399,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 24,
-  },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
   actionCard: {
     backgroundColor: '#18181B',
     borderRadius: 16,
@@ -441,6 +430,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textAlign: 'center',
   },
+
   infoCard: {
     backgroundColor: '#18181B',
     borderRadius: 16,
@@ -454,9 +444,5 @@ const styles = StyleSheet.create({
     color: '#FAFAFA',
     marginBottom: 8,
   },
-  infoText: {
-    fontSize: 14,
-    color: '#A1A1AA',
-    lineHeight: 20,
-  },
+  infoText: { fontSize: 14, color: '#A1A1AA', lineHeight: 20 },
 });

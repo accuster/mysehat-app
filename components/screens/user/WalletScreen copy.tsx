@@ -20,8 +20,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
 } from 'react-native';
 import {
   SafeAreaView,
@@ -33,10 +31,7 @@ import {
   IndianRupee,
   Menu,
   ArrowLeft,
-  ArrowDownCircle,
-  ArrowUpCircle,
-  Clock,
-  ShieldCheck,
+  RefreshCw,
 } from 'lucide-react-native';
 import { useRoute } from '@react-navigation/native';
 import RazorpayCheckout from 'react-native-razorpay';
@@ -51,23 +46,19 @@ import {
 } from '../../../store/slices/walletSlice';
 import { walletApi } from '../../../store/services/walletApi';
 import { useApiErrorHandler } from '../../../hooks/useApiErrorHandler';
-import type { WalletTransaction } from '../../../store/services/walletApi';
 
 type Props = { navigation: any };
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Reward tiers — single source of truth (matches backend) ─────────────────
 const REWARD_TIERS: Record<number, number> = {
   100: 20,
   200: 50,
   500: 120,
   1000: 250,
 };
-const MIN_AMOUNT = 100;
+const MIN_AMOUNT = 1;
 const MAX_AMOUNT = 10000;
 const POPULAR_AMOUNT = 500;
-
-// How close to bottom (px) before lazy-loading transactions
-const LAZY_LOAD_THRESHOLD = 200;
 
 function getReward(cash: number): number {
   return REWARD_TIERS[cash] !== undefined
@@ -80,18 +71,6 @@ const formatINR = (n: number) => {
     return n.toLocaleString('en-IN');
   } catch {
     return String(n);
-  }
-};
-
-const formatDate = (dateStr: string) => {
-  try {
-    return new Date(dateStr).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  } catch {
-    return dateStr;
   }
 };
 
@@ -180,63 +159,8 @@ function AmountBreakdown({ cash, reward }: { cash: number; reward: number }) {
   );
 }
 
-// ─── Transaction Row ──────────────────────────────────────────────────────────
-function TransactionRow({ txn }: { txn: WalletTransaction }) {
-  const isCredit = txn.type === 'credit_purchase';
-  const isReward =
-    txn.razorpay_payment_id === 'REWARD_DEMOGRAPHICS' ||
-    txn.description?.includes('Reward');
-
-  // Determine label
-  const label =
-    txn.description || (isCredit ? 'Wallet Recharge' : 'BMI Payment');
-
-  // Trim long descriptions
-  const displayLabel = label.length > 40 ? label.substring(0, 38) + '…' : label;
-
-  return (
-    <View style={styles.txnRow}>
-      {/* Icon */}
-      <View
-        style={[
-          styles.txnIconWrap,
-          isCredit ? styles.txnIconCredit : styles.txnIconDebit,
-        ]}
-      >
-        {isCredit ? (
-          <ArrowDownCircle size={18} color="#10B981" />
-        ) : (
-          <ArrowUpCircle size={18} color="#F87171" />
-        )}
-      </View>
-
-      {/* Description + Date */}
-      <View style={styles.txnInfo}>
-        <Text style={styles.txnLabel} numberOfLines={1}>
-          {displayLabel}
-        </Text>
-        <Text style={styles.txnDate}>{formatDate(txn.created_at)}</Text>
-      </View>
-
-      {/* Amount */}
-      <View style={styles.txnAmountWrap}>
-        <Text
-          style={[
-            styles.txnAmount,
-            isCredit ? styles.txnAmountCredit : styles.txnAmountDebit,
-          ]}
-        >
-          {isCredit ? '+' : '-'}₹{formatINR(txn.credits)}
-        </Text>
-        <Text style={styles.txnBalance}>
-          Bal ₹{formatINR(txn.balance_after)}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
 // ─── Main Screen ──────────────────────────────────────────────────────────────
+
 export default function WalletScreen({ navigation }: Props) {
   const isMounted = useRef(true);
   const isRazorpayOpen = useRef(false);
@@ -249,13 +173,8 @@ export default function WalletScreen({ navigation }: Props) {
   const isFromStack = route.name === 'WalletStack';
 
   // ── Redux state ─────────────────────────────────────────────────────────────
-  const {
-    balance,
-    isLoadingBalance,
-    isRecharging,
-    transactions,
-    isLoadingTxns,
-  } = useAppSelector(s => s.wallet);
+  const { balance, isLoadingBalance, balanceError, isRecharging } =
+    useAppSelector(s => s.wallet);
 
   // ── Local state ─────────────────────────────────────────────────────────────
   const [amount, setAmount] = useState('');
@@ -263,10 +182,7 @@ export default function WalletScreen({ navigation }: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // ✅ Lazy load gate — true once transactions have been fetched at least once
-  const [txnsLoaded, setTxnsLoaded] = useState(false);
-
-  // ── Derived values ───────────────────────────────────────────────────────────
+  // ── Derived values ──────────────────────────────────────────────────────────
   const parsedAmount = useMemo(() => {
     const n = Number(String(amount).replace(/[^0-9]/g, ''));
     return Number.isFinite(n) ? n : 0;
@@ -290,7 +206,7 @@ export default function WalletScreen({ navigation }: Props) {
   const rewardBalance = balance?.rewards_points ?? 0;
   const totalBalance = balance?.wallet_balance ?? 0;
 
-  // ── Footer height ─────────────────────────────────────────────────────────────
+  // ── Footer height ────────────────────────────────────────────────────────────
   const footerHeight = useMemo(() => {
     const safeBottom = insets.bottom > 0 ? insets.bottom : 0;
     return 12 + (14 * 2 + 16) + 12 + 10 + 16 + safeBottom;
@@ -298,7 +214,7 @@ export default function WalletScreen({ navigation }: Props) {
 
   const contentBottomPadding = useMemo(() => footerHeight + 20, [footerHeight]);
 
-  // ── Lifecycle ─────────────────────────────────────────────────────────────────
+  // ── Lifecycle ────────────────────────────────────────────────────────────────
   useEffect(() => {
     isMounted.current = true;
     loadBalance();
@@ -315,52 +231,16 @@ export default function WalletScreen({ navigation }: Props) {
     });
   }, [dispatch, executeApiCall]);
 
-  // ✅ Lazy load transactions — called once when user scrolls near bottom
-  const loadTransactions = useCallback(async () => {
-    if (txnsLoaded || isLoadingTxns) return; // already loaded or loading
-    console.log('📋 Lazy loading wallet transactions...');
-    await executeApiCall(
-      () =>
-        dispatch(fetchWalletTransactions({ limit: 100, offset: 0 })).unwrap(),
-      { showErrorToast: true },
-    );
-    if (isMounted.current) setTxnsLoaded(true);
-  }, [txnsLoaded, isLoadingTxns, dispatch, executeApiCall]);
-
-  // ✅ Pull-to-refresh — refreshes BOTH balance and transactions (if already loaded)
+  // ✅ Pull-to-refresh handler
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    const tasks: Promise<any>[] = [
-      dispatch(fetchWalletBalance())
-        .unwrap()
-        .catch(() => {}),
-    ];
-    if (txnsLoaded) {
-      tasks.push(
-        dispatch(fetchWalletTransactions({ limit: 100, offset: 0 }))
-          .unwrap()
-          .catch(() => {}),
-      );
-    }
-    await Promise.all(tasks);
+    await dispatch(fetchWalletBalance())
+      .unwrap()
+      .catch(() => {});
     if (isMounted.current) setIsRefreshing(false);
-  }, [dispatch, txnsLoaded]);
+  }, [dispatch]);
 
-  // ✅ Scroll handler — triggers lazy load when near bottom
-  const handleScroll = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      if (txnsLoaded || isLoadingTxns) return;
-      const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-      const distanceFromBottom =
-        contentSize.height - layoutMeasurement.height - contentOffset.y;
-      if (distanceFromBottom < LAZY_LOAD_THRESHOLD) {
-        loadTransactions();
-      }
-    },
-    [txnsLoaded, isLoadingTxns, loadTransactions],
-  );
-
-  // ── Hardware back ─────────────────────────────────────────────────────────────
+  // ── Hardware back ────────────────────────────────────────────────────────────
   useEffect(() => {
     const onBack = () => {
       if (drawerOpen && isFromTab) {
@@ -394,7 +274,7 @@ export default function WalletScreen({ navigation }: Props) {
     if (navigation.canGoBack()) navigation.goBack();
   }, [isProcessing, parsedAmount, navigation]);
 
-  // ── Validate ──────────────────────────────────────────────────────────────────
+  // ── Validate ─────────────────────────────────────────────────────────────────
   const validateAmount = (amt: number): string | null => {
     if (amt < MIN_AMOUNT) return `Minimum amount is ₹${MIN_AMOUNT}`;
     if (amt > MAX_AMOUNT) return `Maximum amount is ₹${MAX_AMOUNT}`;
@@ -421,28 +301,43 @@ export default function WalletScreen({ navigation }: Props) {
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         console.log('💳 WALLET RECHARGE — Amount:', amt, '| Reward:', reward);
 
+        // Step 1: Create Razorpay order
         const orderRes = await walletApi.createRechargeOrder(amt);
+
         if (!isMounted.current) return;
-        if (!orderRes.success)
+
+        if (!orderRes.success) {
           throw new Error(
             orderRes.message || 'Failed to create recharge order',
           );
+        }
 
         const orderData = orderRes.data;
+        console.log('✅ Recharge order created:', orderData.razorpay_order_id);
+
+        // Step 2: Open Razorpay SDK
         const rzpOptions = {
           description: `MySehat Wallet Recharge — ₹${amt}`,
           currency: orderData.currency,
           key: orderData.key_id,
-          amount: orderData.amount,
+          amount: orderData.amount, // paise
           order_id: orderData.razorpay_order_id,
           name: 'MySehat',
           theme: { color: '#7C3AED' },
         };
 
         isRazorpayOpen.current = true;
+        console.log('🌐 Opening Razorpay...');
         const rzpResponse = await RazorpayCheckout.open(rzpOptions);
         isRazorpayOpen.current = false;
 
+        console.log(
+          '✅ Razorpay success — Payment ID:',
+          rzpResponse.razorpay_payment_id,
+        );
+
+        // Step 3: Verify with backend via Redux thunk
+        // Verification MUST complete — don't check isMounted
         const result = await dispatch(
           verifyWalletRecharge({
             razorpay_order_id: rzpResponse.razorpay_order_id,
@@ -457,42 +352,44 @@ export default function WalletScreen({ navigation }: Props) {
           '✅ Wallet recharged! New balance: ₹',
           result.wallet_balance,
         );
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
+        // Reset amount input
         if (isMounted.current) setAmount('');
-
-        // ✅ Refresh transactions after successful recharge (if already loaded)
-        if (txnsLoaded) {
-          dispatch(fetchWalletTransactions({ limit: 100, offset: 0 }));
-        }
 
         Alert.alert(
           '✅ Recharge Successful!',
-          `₹${amt} added to MySehat Cash` +
-            (reward > 0 ? `\n+₹${reward} reward bonus added!` : '') +
-            `\n\nNew Balance: ₹${result.wallet_balance}`,
+          `₹${amt} added to MySehat Cash\n+₹${reward} reward bonus added!\n\nNew Balance: ₹${result.wallet_balance}`,
           [{ text: 'Great!' }],
         );
       } catch (error: any) {
         isRazorpayOpen.current = false;
+        console.log('❌ Recharge error:', error.message);
+
         if (!isMounted.current) return;
-        if (error.code === 0 || error.code === 5) return; // user cancelled
+
+        // Razorpay user-cancelled — don't show error
+        if (error.code === 0 || error.code === 5) {
+          console.log('ℹ️ User cancelled Razorpay');
+          return;
+        }
+
         Alert.alert(
           'Recharge Failed',
-          (typeof error === 'string' ? error : error?.message) ||
-            'Failed to recharge wallet.',
+          error.message || 'Failed to recharge wallet. Please try again.',
           [{ text: 'OK' }],
         );
       } finally {
         if (isMounted.current) setIsProcessing(false);
       }
     },
-    [dispatch, txnsLoaded],
+    [dispatch],
   );
 
   const isAddDisabled =
     !parsedAmount || isProcessing || isRecharging || isLoadingBalance;
 
-  // ── Header ────────────────────────────────────────────────────────────────────
+  // ── Header ───────────────────────────────────────────────────────────────────
   const renderHeader = () => (
     <View style={styles.header}>
       {isFromStack ? (
@@ -512,60 +409,22 @@ export default function WalletScreen({ navigation }: Props) {
         </TouchableOpacity>
       )}
       <Text style={styles.headerTitle}>MySehat Wallet</Text>
-      <View style={styles.iconBtn} />
-    </View>
-  );
-
-  // ── Transaction history section ───────────────────────────────────────────────
-  const renderTransactions = () => (
-    <View style={styles.sectionCard}>
-      <Text style={styles.sectionTitle}>Transaction History</Text>
-      <Text style={styles.sectionSubTitle}>Your recent wallet activity</Text>
-
-      {/* Loading state */}
-      {isLoadingTxns && (
-        <View style={styles.txnLoadingWrap}>
+      {/* Refresh button */}
+      <TouchableOpacity
+        onPress={loadBalance}
+        style={styles.iconBtn}
+        disabled={isLoadingBalance}
+      >
+        {isLoadingBalance ? (
           <ActivityIndicator size="small" color="#7C3AED" />
-          <Text style={styles.txnLoadingText}>Loading transactions...</Text>
-        </View>
-      )}
-
-      {/* Transactions list */}
-      {!isLoadingTxns && txnsLoaded && transactions.length === 0 && (
-        <View style={styles.txnEmptyWrap}>
-          <Clock size={32} color="#3F3F46" />
-          <Text style={styles.txnEmptyText}>No transactions yet</Text>
-          <Text style={styles.txnEmptySubtext}>
-            Your wallet activity will appear here
-          </Text>
-        </View>
-      )}
-
-      {!isLoadingTxns && transactions.length > 0 && (
-        <View style={styles.txnList}>
-          {transactions.map((txn, idx) => (
-            <View key={txn.transaction_id}>
-              <TransactionRow txn={txn} />
-              {idx < transactions.length - 1 && (
-                <View style={styles.txnDivider} />
-              )}
-            </View>
-          ))}
-        </View>
-      )}
-
-      {/* Scroll hint — shown before lazy load triggers */}
-      {!txnsLoaded && !isLoadingTxns && (
-        <View style={styles.txnScrollHint}>
-          <Text style={styles.txnScrollHintText}>
-            ↓ Scroll down to load history
-          </Text>
-        </View>
-      )}
+        ) : (
+          <RefreshCw size={20} color="#71717A" />
+        )}
+      </TouchableOpacity>
     </View>
   );
 
-  // ── Render ────────────────────────────────────────────────────────────────────
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {isFromTab && (
@@ -582,19 +441,17 @@ export default function WalletScreen({ navigation }: Props) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: contentBottomPadding }}
         style={styles.scrollContent}
-        onScroll={handleScroll}
-        scrollEventThrottle={200} // ← check scroll every 200ms (efficient)
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={onRefresh}
-            tintColor="#7C3AED"
-            colors={['#7C3AED']}
-            progressBackgroundColor="#09090B"
+            tintColor="#7C3AED" // iOS spinner color
+            colors={['#7C3AED']} // Android spinner color
+            progressBackgroundColor="#09090B" // Android background
           />
         }
       >
-        {/* ── Balance Card ──────────────────────────────────────────────────── */}
+        {/* ── Balance Card ─────────────────────────────────────────────────── */}
         <View style={styles.balanceCard}>
           <View style={[styles.balanceBanner, { backgroundColor: '#7C3AED' }]}>
             <Text style={styles.balanceLabel}>Available Balance</Text>
@@ -617,6 +474,8 @@ export default function WalletScreen({ navigation }: Props) {
                 </Text>
               </View>
             </View>
+
+            {/* Cash vs Rewards breakdown */}
             {!isLoadingBalance && (
               <View style={styles.bucketRow}>
                 <Text style={styles.bucketText}>
@@ -628,6 +487,7 @@ export default function WalletScreen({ navigation }: Props) {
                 </Text>
               </View>
             )}
+
             <View style={styles.bannerCoin}>
               <View style={styles.bannerCoinCircle}>
                 <Text style={styles.bannerCoinText}>₹</Text>
@@ -664,7 +524,7 @@ export default function WalletScreen({ navigation }: Props) {
           </View>
         </View>
 
-        {/* ── Add Cash ──────────────────────────────────────────────────────── */}
+        {/* ── Add Cash ─────────────────────────────────────────────────────── */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Add Cash</Text>
           <Text style={styles.sectionSubTitle}>
@@ -716,12 +576,9 @@ export default function WalletScreen({ navigation }: Props) {
             ))}
           </View>
         </View>
-
-        {/* ── Transaction History (lazy loaded) ─────────────────────────────── */}
-        {renderTransactions()}
       </ScrollView>
 
-      {/* ── Sticky Footer ─────────────────────────────────────────────────── */}
+      {/* ── Sticky Footer ──────────────────────────────────────────────────── */}
       <View
         style={[
           styles.stickyFooter,
@@ -749,12 +606,9 @@ export default function WalletScreen({ navigation }: Props) {
             <Text style={styles.primaryBtnText}>Add Balance</Text>
           )}
         </Pressable>
-        <View style={styles.poweredByRow}>
-          <ShieldCheck size={14} color="#6EE7B7" />
-          <Text style={styles.poweredBy}>
-            Secure payments powered by Razorpay
-          </Text>
-        </View>
+        <Text style={styles.poweredBy}>
+          Secure payments powered by Razorpay
+        </Text>
       </View>
     </SafeAreaView>
   );
@@ -894,7 +748,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.6)',
     marginTop: 4,
     fontSize: 13,
-    marginBottom: 4,
   },
 
   inputLabel: {
@@ -1023,65 +876,6 @@ const styles = StyleSheet.create({
   },
   coinTextSm: { color: '#111827', fontWeight: '900', fontSize: 11 },
 
-  // ── Transaction styles ─────────────────────────────────────────────────────
-  txnList: { marginTop: 12 },
-  txnDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    marginVertical: 2,
-  },
-
-  txnRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    gap: 12,
-  },
-  txnIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  txnIconCredit: { backgroundColor: 'rgba(16,185,129,0.12)' },
-  txnIconDebit: { backgroundColor: 'rgba(248,113,113,0.12)' },
-
-  txnInfo: { flex: 1 },
-  txnLabel: {
-    color: 'rgba(255,255,255,0.88)',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  txnDate: { color: 'rgba(255,255,255,0.4)', fontSize: 11, marginTop: 3 },
-
-  txnAmountWrap: { alignItems: 'flex-end' },
-  txnAmount: { fontSize: 14, fontWeight: '800' },
-  txnAmountCredit: { color: '#10B981' },
-  txnAmountDebit: { color: '#F87171' },
-  txnBalance: { color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 3 },
-
-  txnLoadingWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 20,
-  },
-  txnLoadingText: { color: 'rgba(255,255,255,0.5)', fontSize: 13 },
-
-  txnEmptyWrap: { alignItems: 'center', paddingVertical: 28, gap: 8 },
-  txnEmptyText: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  txnEmptySubtext: { color: 'rgba(255,255,255,0.3)', fontSize: 12 },
-
-  txnScrollHint: { alignItems: 'center', paddingVertical: 16 },
-  txnScrollHintText: { color: 'rgba(255,255,255,0.25)', fontSize: 12 },
-
-  // ── Footer ──────────────────────────────────────────────────────────────────
   stickyFooter: {
     position: 'absolute',
     bottom: 0,
@@ -1103,15 +897,10 @@ const styles = StyleSheet.create({
   },
   primaryBtnDisabled: { opacity: 0.45 },
   primaryBtnText: { color: 'white', fontSize: 16, fontWeight: '900' },
-  poweredByRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 10,
-  },
   poweredBy: {
+    textAlign: 'center',
     color: 'rgba(255,255,255,0.5)',
     fontSize: 12,
+    marginTop: 10,
   },
 });

@@ -1,12 +1,10 @@
 // store/slices/authSlice.ts
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { persistor } from '../index';
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { AuthState, CompleteProfileRequest } from '../../types/auth.types';
 import { authApi } from '../services/authApi';
 import { storage } from '../../utils/storage';
-import { clearVerifiedOrders } from './paymentSlice';
-import { resetWallet } from './walletSlice';
-import { resetOrders } from './orderSlice';
 
 // Initial state
 const initialState: AuthState = {
@@ -19,9 +17,7 @@ const initialState: AuthState = {
   otpSent: false,
 };
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// ASYNC THUNKS
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Async thunks
 
 /**
  * Verify login with MSG91 access token
@@ -55,7 +51,7 @@ export const verifyLogin = createAsyncThunk(
       console.log('Requires profile setup:', response.requiresProfileSetup);
 
       if (response.success) {
-        // Save tokens to storage
+        // ✅ CORRECTED: Use direct properties, not nested data
         await storage.saveToken(response.accessToken);
         await storage.saveRefreshToken(response.refreshToken);
 
@@ -179,8 +175,9 @@ export const loadUserFromStorage = createAsyncThunk(
   },
 );
 
+
 /**
- * Logout - User initiated logout
+ * Logout - FIXED VERSION
  */
 export const logout = createAsyncThunk(
   'auth/logout',
@@ -189,27 +186,23 @@ export const logout = createAsyncThunk(
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('👋 LOGOUT PROCESS STARTED');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
+      
       // 1. Call logout API
       console.log('1️⃣ Calling logout API...');
       await authApi.logout();
       console.log('✅ API logout successful');
-      // ✅ ADD THESE TWO LINES
-      dispatch(clearVerifiedOrders());
-      dispatch(resetOrders());
-      dispatch(resetWallet());
-
+      
       // 2. Clear AsyncStorage completely
       console.log('2️⃣ Clearing AsyncStorage...');
       await storage.clearAuth();
       console.log('✅ AsyncStorage cleared');
-
+      
       // 3. Pause writes and flush pending operations
       console.log('3️⃣ Pausing and flushing persistor...');
       await persistor.pause();
       await persistor.flush();
       console.log('✅ Persistor flushed');
-
+      
       // 4. Purge all persisted state
       console.log('4️⃣ Purging persisted state...');
       await persistor.purge();
@@ -218,14 +211,14 @@ export const logout = createAsyncThunk(
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('✅ LOGOUT COMPLETED SUCCESSFULLY');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
+      
       return null;
     } catch (error: any) {
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('⚠️ LOGOUT ERROR - FORCING CLEANUP');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('Error:', error.message);
-
+      
       // Even if API fails, force clear everything
       try {
         await storage.clearAuth();
@@ -236,80 +229,14 @@ export const logout = createAsyncThunk(
       } catch (cleanupError: any) {
         console.log('❌ Cleanup error:', cleanupError.message);
       }
-
+      
       console.log('⚠️ Logout API failed but local data cleared');
       return rejectWithValue(error.message);
     }
   },
 );
 
-/**
- * ✅ NEW: Force logout on session expiration (called by apiClient)
- * This is different from regular logout - it's triggered automatically
- * when the refresh token fails (both access and refresh tokens expired)
- */
-export const forceLogoutOnSessionExpired = createAsyncThunk(
-  'auth/forceLogoutOnSessionExpired',
-  async (_, { dispatch }) => {
-    try {
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('🔒 FORCE LOGOUT - SESSION EXPIRED');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
-      // Don't call API logout (since tokens are already invalid)
-      console.log('1️⃣ Skipping API logout (tokens already invalid)');
-      dispatch(clearVerifiedOrders());
-      dispatch(resetOrders());
-      dispatch(resetWallet());
-
-      // Clear AsyncStorage
-      console.log('2️⃣ Clearing AsyncStorage...');
-      await storage.clearAuth();
-      console.log('✅ AsyncStorage cleared');
-
-      // Purge Redux persist
-      console.log('3️⃣ Pausing and flushing persistor...');
-      await persistor.pause();
-      await persistor.flush();
-      console.log('✅ Persistor flushed');
-
-      console.log('4️⃣ Purging persisted state...');
-      await persistor.purge();
-      console.log('✅ Persisted state purged');
-
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('✅ FORCE LOGOUT COMPLETED');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
-      return null;
-    } catch (error: any) {
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('⚠️ FORCE LOGOUT ERROR - FORCING CLEANUP');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('Error:', error.message);
-
-      // Still force clear everything
-      try {
-        await storage.clearAuth();
-        await persistor.pause();
-        await persistor.flush();
-        await persistor.purge();
-        console.log('✅ Forced cleanup completed');
-      } catch (cleanupError: any) {
-        console.log('❌ Cleanup error:', cleanupError.message);
-      }
-
-      // Still return success to trigger state reset
-      console.log('⚠️ Forcing state reset despite errors');
-      return null;
-    }
-  },
-);
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// SLICE
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+// Slice
 const authSlice = createSlice({
   name: 'auth',
   initialState,
@@ -326,9 +253,7 @@ const authSlice = createSlice({
     },
   },
   extraReducers: builder => {
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // VERIFY LOGIN
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // Verify Login
     builder
       .addCase(verifyLogin.pending, state => {
         console.log('🔄 verifyLogin: pending');
@@ -360,9 +285,7 @@ const authSlice = createSlice({
         state.error = action.payload as string;
       });
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // COMPLETE PROFILE
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // Complete Profile
     builder
       .addCase(completeProfile.pending, state => {
         state.isLoading = true;
@@ -382,9 +305,7 @@ const authSlice = createSlice({
         state.error = action.payload as string;
       });
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // LOAD FROM STORAGE
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // Load from Storage
     builder
       .addCase(loadUserFromStorage.pending, state => {
         state.isLoading = true;
@@ -404,50 +325,21 @@ const authSlice = createSlice({
         state.isAuthenticated = false;
       });
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // LOGOUT (USER INITIATED)
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // Logout - CRITICAL FIX
     builder
       .addCase(logout.pending, state => {
         state.isLoading = true;
       })
       .addCase(logout.fulfilled, () => {
         // ✅ Return initialState (complete reset)
-        console.log('✅ Logout fulfilled - resetting to initialState');
         return initialState;
       })
       .addCase(logout.rejected, () => {
         // ✅ Return initialState even on error
-        console.log('⚠️ Logout rejected - resetting to initialState anyway');
-        return initialState;
-      });
-
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // ✅ NEW: FORCE LOGOUT (SESSION EXPIRED)
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    builder
-      .addCase(forceLogoutOnSessionExpired.pending, state => {
-        console.log('🔄 forceLogoutOnSessionExpired: pending');
-        state.isLoading = true;
-      })
-      .addCase(forceLogoutOnSessionExpired.fulfilled, () => {
-        // ✅ Return initialState (complete reset)
-        console.log('✅ Force logout fulfilled - resetting to initialState');
-        return initialState;
-      })
-      .addCase(forceLogoutOnSessionExpired.rejected, () => {
-        // ✅ Return initialState even on error
-        console.log(
-          '⚠️ Force logout rejected - resetting to initialState anyway',
-        );
         return initialState;
       });
   },
 });
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// EXPORTS
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 export const { setOtpSent, clearError, resetAuth } = authSlice.actions;
 export default authSlice.reducer;

@@ -1,4 +1,4 @@
-// store/hooks.ts
+// store/hook.ts
 // Custom hooks for TypeScript support with Redux
 
 import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';

@@ -14,6 +14,7 @@ export const storage = {
       await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, token);
     } catch (error) {
       console.log('Error saving token:', error);
+      throw new Error('Failed to save authentication token. Please try again.');
     }
   },
 
@@ -33,6 +34,7 @@ export const storage = {
       await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
     } catch (error) {
       console.log('Error saving refresh token:', error);
+      throw new Error('Failed to save authentication token. Please try again.');
     }
   },
 
@@ -52,6 +54,7 @@ export const storage = {
       await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
     } catch (error) {
       console.log('Error saving user:', error);
+      throw new Error('Failed to save user data. Please try again.');
     }
   },
 

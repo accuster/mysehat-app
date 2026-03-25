@@ -57,6 +57,7 @@ type Props = {
 export default function LoginScreen({ navigation }: Props) {
   const isMounted = useRef(true);
   const appState = useRef(AppState.currentState);
+  const isVerifying = useRef(false);
 
   const dispatch = useDispatch<AppDispatch>();
   const { isLoading, error, otpSent } = useSelector(
@@ -83,14 +84,14 @@ export default function LoginScreen({ navigation }: Props) {
   // ✅ FIX 1: Reset invalid OTP session on mount
   useEffect(() => {
     console.log('🔍 Checking OTP session validity...');
-    
+
     // If Redux says OTP was sent, but we don't have reqId
     // This means app was restarted after OTP was sent
     if (otpSent && !reqId) {
       console.log('⚠️ Invalid OTP session detected - resetting to phone input');
       console.log('Redux otpSent:', otpSent);
       console.log('Component reqId:', reqId);
-      
+
       // Reset to initial state
       dispatch(setOtpSent(false));
       setOtp('');
@@ -110,26 +111,27 @@ export default function LoginScreen({ navigation }: Props) {
         nextAppState === 'active'
       ) {
         console.log('📱 App came to foreground');
-        
-        // Check if OTP session is still valid
+
+        // ✅ Check latest values from refs instead of closure
         if (otpSent && !reqId) {
           console.log('⚠️ OTP session lost after backgrounding - resetting');
           dispatch(setOtpSent(false));
           setOtp('');
           setOtpError('');
           setResendTimer(0);
-          
+
           showInfo('OTP session expired. Please request a new OTP.');
         }
       }
-      
+
       appState.current = nextAppState;
     });
 
     return () => {
       subscription.remove();
     };
-  }, [otpSent, reqId, dispatch, showInfo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleOpenURL = useCallback(
     async (url: string, title: string) => {
@@ -313,7 +315,7 @@ export default function LoginScreen({ navigation }: Props) {
         {
           label: 'Retry',
           onPress: () => handleSendOtp(),
-        }
+        },
       );
       return;
     }
@@ -362,7 +364,7 @@ export default function LoginScreen({ navigation }: Props) {
             {
               label: 'Retry',
               onPress: () => handleSendOtp(),
-            }
+            },
           );
         } else {
           setPhoneError(err.message || 'Failed to send OTP. Please try again.');
@@ -392,7 +394,7 @@ export default function LoginScreen({ navigation }: Props) {
         {
           label: 'Retry',
           onPress: () => handleResendOtp(),
-        }
+        },
       );
       return;
     }
@@ -435,7 +437,7 @@ export default function LoginScreen({ navigation }: Props) {
             {
               label: 'Retry',
               onPress: () => handleResendOtp(),
-            }
+            },
           );
         } else {
           setOtpError(err.message || 'Failed to resend OTP. Please try again.');
@@ -493,6 +495,13 @@ export default function LoginScreen({ navigation }: Props) {
   };
 
   const handleVerifyOtp = async () => {
+    // ✅ Prevent double verification
+    if (isVerifying.current) {
+      console.log('⚠️ Already verifying OTP, skipping...');
+      return;
+    }
+    isVerifying.current = true;
+
     console.log('🔐 Verifying OTP...');
 
     if (!isMounted.current) {
@@ -530,7 +539,7 @@ export default function LoginScreen({ navigation }: Props) {
         {
           label: 'Retry',
           onPress: () => handleVerifyOtp(),
-        }
+        },
       );
       return;
     }
@@ -621,9 +630,12 @@ export default function LoginScreen({ navigation }: Props) {
             {
               label: 'Retry',
               onPress: () => handleVerifyOtp(),
-            }
+            },
           );
-        } else if (err.message && err.message.toLowerCase().includes('invalid')) {
+        } else if (
+          err.message &&
+          err.message.toLowerCase().includes('invalid')
+        ) {
           setOtpError('Invalid OTP. Please check and try again.');
         } else if (
           err.message &&
@@ -634,6 +646,8 @@ export default function LoginScreen({ navigation }: Props) {
           setOtpError('Verification failed. Please try again.');
         }
       }
+    } finally {
+      isVerifying.current = false;
     }
   };
 
@@ -677,7 +691,6 @@ export default function LoginScreen({ navigation }: Props) {
       >
         <View style={styles.mainContent}>
           <View style={styles.header}>
-            <StatusBar barStyle="light-content" />
             <Image
               source={require('../../../assets/images/mysehat_icon.png')}
               style={styles.logo}

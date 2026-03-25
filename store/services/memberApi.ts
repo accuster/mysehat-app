@@ -105,7 +105,7 @@ class MemberApiService {
 
   /**
    * Get logged-in user's profile (optimized)
-   * Endpoint: GET /api/profile
+   * Endpoint: GET /api/members/profile
    */
   async getMyProfile(): Promise<Member> {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -115,7 +115,7 @@ class MemberApiService {
     const response = await apiClient.get<{
       success: boolean;
       profile: Member;
-    }>('/profile');
+    }>('/members/profile');
 
     console.log('✅ Profile fetched:', response.profile.name);
     return response.profile;
@@ -223,7 +223,7 @@ class MemberApiService {
         success: boolean;
         message: string;
         data: UpdateProfileResponse;
-      }>(`${API_BASE_URL}/profile`, formData, {
+      }>(`${API_BASE_URL}/members/profile`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           Authorization: `Bearer ${token}`,

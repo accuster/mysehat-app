@@ -56,5 +56,14 @@ export interface CompleteProfileResponse {
   };
 }
 
+export interface StoredUser {
+  userId: string;
+  mobile: string;
+  name: string;
+  age: number;
+  gender: string;
+  isNewUser: boolean;
+  requiresProfileSetup: boolean;
+}
 // =======================================END====================================
 

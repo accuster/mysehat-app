@@ -1,4 +1,4 @@
-// components/screens/user/PayScreen.tsx - FIXED: Dynamic Footer + Prevent unmounting on payment cancel
+// components/screens/user/PayScreen.tsx
 /* eslint-disable react-native/no-inline-styles */
 import React, {
   useCallback,
@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
   BackHandler,
   AppState,
+  AppStateStatus,
 } from 'react-native';
 import BottomSheet, {
   BottomSheetBackdrop,
@@ -22,54 +23,74 @@ import BottomSheet, {
   BottomSheetFooter,
 } from '@gorhom/bottom-sheet';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Hash, User, Calendar, Wallet } from 'lucide-react-native';
+import {
+  Hash,
+  User,
+  Calendar,
+  Wallet,
+  CreditCard,
+  AlertCircle,
+} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import RazorpayCheckout from 'react-native-razorpay';
+
+import { useAppDispatch, useAppSelector } from '../../../store/hook';
+import {
+  verifyPayment,
+  savePendingVerification,
+  clearPendingVerification,
+  MAX_VERIFY_RETRIES,
+  MAX_PAYMENT_RETRIES,
+} from '../../../store/slices/paymentSlice';
+import {
+  fetchWalletBalance,
+  payBMIWithWallet,
+} from '../../../store/slices/walletSlice';
+import { markOrderPaid } from '../../../store/slices/orderSlice';
 import { paymentApi } from '../../../store/services/paymentApi';
 import type { CreatePaymentData } from '../../../store/services/paymentApi';
 import ErrorToast from '../../common/ErrorToast';
 import { useErrorToast } from '../../../hooks/useErrorToast';
 
-type Props = {
-  route: any;
-  navigation: any;
+type Props = { route: any; navigation: any };
+
+const formatINR = (n: number) => {
+  try {
+    return n.toLocaleString('en-IN');
+  } catch {
+    return String(n);
+  }
 };
 
 export default function PayScreen({ route, navigation }: Props) {
   const { selectedUserName, user, orderId, qrData } = route.params;
-  const bottomSheetRef = useRef<BottomSheet>(null);
+  const dispatch = useAppDispatch();
 
+  // ─── Refs ──────────────────────────────────────────────────────────────────
+  const bottomSheetRef = useRef<BottomSheet>(null);
   const isMounted = useRef(true);
   const isPaymentInProgress = useRef(false);
+  const paymentRetryCount = useRef(0);
 
+  const focusListenerRef = useRef<(() => void) | null>(null);
+
+  const lastAppState = useRef<AppStateStatus>(AppState.currentState);
+
+  // ─── State ─────────────────────────────────────────────────────────────────
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
+  const [topUpCompleted, setTopUpCompleted] = useState(false);
+  const [refreshedAfterTopUp, setRefreshedAfterTopUp] = useState(false);
 
   const { toast, showError, showWarning, hideToast } = useErrorToast();
-
   const insets = useSafeAreaInsets();
 
-  /* 🎯 DYNAMIC CALCULATIONS FOR FOOTER */
-  const footerHeight = useMemo(() => {
-    const BUTTON_HEIGHT = 16 * 2 + 17; // paddingVertical (16 * 2) + font height (17)
-    const FOOTER_TOP_PADDING = 8;
-    const FOOTER_BOTTOM_PADDING = 12;
-    const safeAreaBottom = insets.bottom > 0 ? insets.bottom : 0;
+  // ─── Redux ─────────────────────────────────────────────────────────────────
+  const { balance, isLoadingBalance, isPayingWithWallet } = useAppSelector(
+    s => s.wallet,
+  );
 
-    return (
-      FOOTER_TOP_PADDING +
-      BUTTON_HEIGHT +
-      FOOTER_BOTTOM_PADDING +
-      safeAreaBottom
-    );
-  }, [insets.bottom]);
-
-  // Calculate scroll content bottom padding (footer height + extra breathing room)
-  const contentBottomPadding = useMemo(() => {
-    return footerHeight + 24; // Extra 24px space
-  }, [footerHeight]);
-
-  /* Order details from backend */
+  // ─── Order details ─────────────────────────────────────────────────────────
   const orderDetails = useMemo(
     () => ({
       orderId: orderId || `ORD${Date.now()}`,
@@ -86,98 +107,100 @@ export default function PayScreen({ route, navigation }: Props) {
     [orderId, qrData],
   );
 
-  // ✅ Setup and cleanup
+  // ─── Wallet balance ─────────────────────────────────────────────────────────
+  const walletBalance = balance?.wallet_balance ?? 0;
+  const hasSufficientBal = walletBalance >= orderDetails.amount;
+
+  // ─── Lifecycle ─────────────────────────────────────────────────────────────
   useEffect(() => {
     isMounted.current = true;
+    console.log(
+      '💳 PayScreen mounted — Order:',
+      orderDetails.orderId,
+      '| Fee: ₹',
+      orderDetails.amount,
+    );
 
-    console.log('💳 PayScreen: Component mounted');
-    console.log('Order ID:', orderDetails.orderId);
-    console.log('Amount:', orderDetails.amount);
-    console.log('User:', user?.name || selectedUserName);
+    // Initial balance fetch on mount
+    dispatch(fetchWalletBalance());
 
     return () => {
-      console.log('🧹 PayScreen: Unmounting...');
       isMounted.current = false;
+      console.log('🧹 PayScreen unmounted');
 
-      if (isPaymentInProgress.current) {
-        console.log('⚠️ Component unmounted while payment was in progress');
+      if (focusListenerRef.current) {
+        console.log('🧹 Cleaning up focus listener');
+        focusListenerRef.current();
+        focusListenerRef.current = null;
       }
     };
-  }, [orderDetails.orderId, orderDetails.amount, user?.name, selectedUserName]);
+  }, [dispatch, orderDetails.orderId, orderDetails.amount]);
 
-  // ✅ Prevent navigation when payment is in progress
   useEffect(() => {
-    const unsubscribe = navigation.addListener('beforeRemove', (e: any) => {
-      if (isPaymentInProgress.current) {
-        console.log('🚫 Preventing navigation - payment in Razorpay modal');
-        e.preventDefault();
+    const handleAppStateChange = (nextState: AppStateStatus) => {
+      console.log('📱 AppState:', lastAppState.current, '→', nextState);
 
+      if (
+        lastAppState.current !== 'active' &&
+        nextState === 'active' &&
+        isMounted.current &&
+        !isPaymentInProgress.current // ← don't fetch during active Razorpay session
+      ) {
+        console.log('🔄 App foregrounded — refreshing wallet balance');
+        dispatch(fetchWalletBalance());
+      }
+
+      lastAppState.current = nextState;
+    };
+
+    const sub = AppState.addEventListener('change', handleAppStateChange);
+    return () => sub.remove();
+  }, [dispatch]);
+
+  // ─── Footer height ──────────────────────────────────────────────────────────
+  const footerHeight = useMemo(() => {
+    const safeBot = insets.bottom > 0 ? insets.bottom : 0;
+    return 8 + (16 * 2 + 17) + 12 + (16 * 2 + 17) + 20 + safeBot;
+  }, [insets.bottom]);
+
+  const contentBottomPadding = useMemo(() => footerHeight + 24, [footerHeight]);
+
+  // ─── Navigation guards ──────────────────────────────────────────────────────
+  useEffect(() => {
+    const unsub = navigation.addListener('beforeRemove', (e: any) => {
+      if (isPaymentInProgress.current) {
+        e.preventDefault();
         showWarning(
-          'Payment is in progress. Please complete or cancel the payment first.',
+          'Payment is in progress. Please complete or cancel it first.',
         );
       }
     });
-
-    return unsubscribe;
+    return unsub;
   }, [navigation, showWarning]);
 
-  // ✅ Handle AppState changes (when Razorpay opens/closes)
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', nextAppState => {
-      console.log('📱 AppState changed:', nextAppState);
-
-      if (nextAppState === 'active' && isPaymentInProgress.current) {
-        console.log('✅ App became active with payment in progress');
-        console.log(
-          '💡 User probably closed Razorpay - waiting for SDK callback',
-        );
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
-  // ✅ Handle hardware back button
-  useEffect(() => {
-    const backAction = () => {
-      console.log('⬅️ HARDWARE BACK: PayScreen');
-
+    const onBack = () => {
       if (isPaymentInProgress.current) {
         showWarning(
-          'Payment is in progress. Please complete or cancel the payment in the Razorpay window.',
+          'Please complete or cancel the payment in the Razorpay window.',
         );
         return true;
       }
-
-      if (isVerifyingPayment) {
+      if (isVerifyingPayment || isPayingWithWallet) {
         showWarning('Verifying payment. Please wait...');
         return true;
       }
-
-      if (isProcessingPayment && !isPaymentInProgress.current) {
-        console.log('⚠️ Back pressed while creating payment order');
-        return false;
-      }
-
       if (isMounted.current && navigation.canGoBack()) {
         navigation.goBack();
         return true;
       }
-
       return false;
     };
+    const handler = BackHandler.addEventListener('hardwareBackPress', onBack);
+    return () => handler.remove();
+  }, [navigation, isVerifyingPayment, isPayingWithWallet, showWarning]);
 
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      backAction,
-    );
-
-    return () => backHandler.remove();
-  }, [navigation, isProcessingPayment, isVerifyingPayment, showWarning]);
-
-  const snapPoints = useMemo(() => ['80%'], []);
+  const snapPoints = useMemo(() => ['85%'], []);
 
   const renderBackdrop = useCallback(
     (props: any) => (
@@ -187,18 +210,14 @@ export default function PayScreen({ route, navigation }: Props) {
         disappearsOnIndex={-1}
         opacity={0.6}
         onPress={() => {
-          if (isPaymentInProgress.current) {
-            showWarning(
-              'Payment is in progress. Please complete or cancel in the Razorpay window.',
-            );
+          if (
+            isPaymentInProgress.current ||
+            isVerifyingPayment ||
+            isPayingWithWallet
+          ) {
+            showWarning('Please wait for the current operation to complete.');
             return;
           }
-
-          if (isVerifyingPayment) {
-            showWarning('Verifying payment. Please wait...');
-            return;
-          }
-
           if (
             !isProcessingPayment &&
             isMounted.current &&
@@ -209,169 +228,241 @@ export default function PayScreen({ route, navigation }: Props) {
         }}
       />
     ),
-    [navigation, isProcessingPayment, isVerifyingPayment, showWarning],
+    [
+      navigation,
+      isProcessingPayment,
+      isVerifyingPayment,
+      isPayingWithWallet,
+      showWarning,
+    ],
   );
 
   useEffect(() => {
     bottomSheetRef.current?.snapToIndex(0);
   }, []);
 
-  /**
-   * Verify payment with backend
-   */
+  // ─── Navigate to success ────────────────────────────────────────────────────
+  const goToSuccess = useCallback(
+    (
+      paymentMethod: string,
+      reportId: string,
+      paymentId: string,
+      amount: number,
+    ) => {
+      navigation.navigate('PaymentSuccess', {
+        amountLabel: `₹${amount}`,
+        refNumber: orderDetails.orderId,
+        paymentTime: orderDetails.timestamp,
+        paymentMethod,
+        senderName: user?.name || selectedUserName,
+        reportId,
+        paymentId,
+      });
+    },
+    [navigation, orderDetails, user, selectedUserName],
+  );
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PAY WITH WALLET
+  // ═══════════════════════════════════════════════════════════════════════════
+  const handleWalletPay = useCallback(async () => {
+    if (!isMounted.current) return;
+    try {
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('💸 PAY WITH WALLET — Order:', orderDetails.orderId);
+
+      const result = await dispatch(
+        payBMIWithWallet(orderDetails.orderId),
+      ).unwrap();
+      dispatch(markOrderPaid({ orderId: orderDetails.orderId }));
+
+      console.log('✅ Wallet payment success. Report:', result.report_id);
+      goToSuccess(
+        'Wallet',
+        result.report_id,
+        result.transaction_id,
+        result.amount_paid,
+      );
+    } catch (error: any) {
+      console.log('❌ Wallet payment error:', error.message);
+      if (!isMounted.current) return;
+
+      if (error.message?.includes('Insufficient')) {
+        showWarning(
+          `Insufficient balance. Need ₹${
+            orderDetails.amount
+          }, have ₹${formatINR(walletBalance)}.`,
+        );
+      } else {
+        showError(error.message || 'Wallet payment failed. Please try again.');
+      }
+    }
+  }, [
+    dispatch,
+    orderDetails.orderId,
+    orderDetails.amount,
+    walletBalance,
+    goToSuccess,
+    showError,
+    showWarning,
+  ]);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ✅ P1 FIX #6: TOP UP WALLET — fixed focus listener leak
+  // ═══════════════════════════════════════════════════════════════════════════
+  const handleTopUpWallet = useCallback(() => {
+    // ── Clean up any existing focus listener before creating a new one ────────
+    // Prevents stacking multiple listeners if user taps "Top Up" more than once
+    if (focusListenerRef.current) {
+      console.log(
+        '🧹 Removing previous focus listener before creating new one',
+      );
+      focusListenerRef.current();
+      focusListenerRef.current = null;
+    }
+
+    // Navigate to WalletStack
+    navigation.navigate('WalletStack');
+
+    // ✅ Store the unsubscribe function in a ref so it can be cleaned up:
+    //   a) When a new focus listener is created (user taps Top Up again)
+    //   b) When component unmounts (useEffect cleanup above)
+    focusListenerRef.current = navigation.addListener('focus', async () => {
+      // ── Remove listener immediately — only fire once ───────────────────────
+      if (focusListenerRef.current) {
+        focusListenerRef.current();
+        focusListenerRef.current = null;
+      }
+
+      console.log('🔄 Returned from WalletStack — refreshing balance');
+
+      if (!isMounted.current) return;
+
+      // Re-fetch balance to check if top-up was successful
+      await dispatch(fetchWalletBalance());
+
+      if (isMounted.current) {
+        setTopUpCompleted(true);
+        setRefreshedAfterTopUp(true);
+      }
+    });
+  }, [navigation, dispatch]);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // VERIFY RAZORPAY PAYMENT (unchanged logic)
+  // ═══════════════════════════════════════════════════════════════════════════
   const verifyPaymentWithBackend = useCallback(
-    async (razorpayResponse: any) => {
-      try {
-        if (!isMounted.current) {
-          console.log('⚠️ Component unmounted, aborting verification');
-          return;
+    async (razorpayResponse: any, retryCount = 0) => {
+      if (retryCount >= MAX_VERIFY_RETRIES) {
+        console.log(`❌ Max verify retries (${MAX_VERIFY_RETRIES}) reached`);
+        if (isMounted.current) {
+          showError(
+            `Verification failed after ${MAX_VERIFY_RETRIES} attempts. ` +
+              'Please check Reports tab. Payment ID: ' +
+              razorpayResponse.razorpay_payment_id,
+          );
+          setIsVerifyingPayment(false);
         }
+        return;
+      }
 
-        setIsVerifyingPayment(true);
+      try {
+        if (isMounted.current) setIsVerifyingPayment(true);
 
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('🔐 VERIFYING PAYMENT');
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('Order ID:', orderDetails.orderId);
-        console.log('Payment ID:', razorpayResponse.razorpay_payment_id);
-
-        const verifyResponse = await paymentApi.verifyPayment(
-          orderDetails.orderId,
-          {
+        dispatch(
+          savePendingVerification({
+            orderId: orderDetails.orderId,
             razorpay_order_id: razorpayResponse.razorpay_order_id,
             razorpay_payment_id: razorpayResponse.razorpay_payment_id,
             razorpay_signature: razorpayResponse.razorpay_signature,
-          },
+            attemptedAt: new Date().toISOString(),
+            retryCount,
+          }),
         );
 
-        if (!isMounted.current) {
-          console.log('⚠️ Component unmounted after verification');
-          return;
-        }
+        const result = await dispatch(
+          verifyPayment({
+            orderId: orderDetails.orderId,
+            razorpay_order_id: razorpayResponse.razorpay_order_id,
+            razorpay_payment_id: razorpayResponse.razorpay_payment_id,
+            razorpay_signature: razorpayResponse.razorpay_signature,
+          }),
+        ).unwrap();
 
-        if (!verifyResponse.success) {
-          throw new Error(
-            verifyResponse.message || 'Payment verification failed',
-          );
-        }
+        dispatch(clearPendingVerification());
+        dispatch(markOrderPaid({ orderId: orderDetails.orderId }));
+        dispatch(fetchWalletBalance());
 
-        console.log('✅ Payment verified successfully!');
-        console.log('Report ID:', verifyResponse.data.report_id);
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
-        try {
-          navigation.navigate('PaymentSuccess', {
-            amountLabel: `₹${orderDetails.amount}`,
-            refNumber: orderDetails.orderId,
-            paymentTime: orderDetails.timestamp,
-            paymentMethod: verifyResponse.data.payment_method,
-            senderName: user?.name || selectedUserName,
-            reportId: verifyResponse.data.report_id,
-            paymentId: razorpayResponse.razorpay_payment_id,
-          });
-        } catch (navError) {
-          console.log('❌ Navigation error:', navError);
-          showError(
-            'Payment completed successfully! Please check your reports.',
-          );
-        }
+        goToSuccess(
+          result.paymentMethod,
+          result.reportId,
+          razorpayResponse.razorpay_payment_id,
+          orderDetails.amount,
+        );
       } catch (error: any) {
-        console.log('❌ Payment verification failed:', error.message);
+        console.log(
+          `❌ Verify attempt ${retryCount + 1} failed:`,
+          error.message,
+        );
+        const nextRetry = retryCount + 1;
+        const attemptsLeft = MAX_VERIFY_RETRIES - nextRetry;
 
         if (isMounted.current) {
           showError(
-            'Payment completed but verification failed. Please contact support with your payment ID.',
-            {
-              label: 'Contact Support',
-              onPress: () => {
-                try {
-                  navigation.navigate('Support');
-                } catch (err) {
-                  console.log('Navigation error:', err);
+            attemptsLeft > 0
+              ? `Verification failed. ${attemptsLeft} attempt(s) left.`
+              : `Verification failed after ${MAX_VERIFY_RETRIES} attempts. Contact support.`,
+            attemptsLeft > 0
+              ? {
+                  label: `Retry (${attemptsLeft} left)`,
+                  onPress: () =>
+                    verifyPaymentWithBackend(razorpayResponse, nextRetry),
                 }
-              },
-            },
+              : undefined,
           );
         }
       } finally {
-        if (isMounted.current) {
-          setIsVerifyingPayment(false);
-        }
+        if (isMounted.current) setIsVerifyingPayment(false);
       }
     },
     [
+      dispatch,
       orderDetails.orderId,
       orderDetails.amount,
-      orderDetails.timestamp,
-      user?.name,
-      selectedUserName,
-      navigation,
+      goToSuccess,
       showError,
     ],
   );
 
-  /**
-   * Handle Razorpay Payment with SDK
-   */
-  const handlePayment = useCallback(async () => {
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PAY WITH RAZORPAY (unchanged logic)
+  // ═══════════════════════════════════════════════════════════════════════════
+  const handleRazorpayPayment = useCallback(async () => {
     try {
-      if (!isMounted.current) {
-        console.log('⚠️ Component unmounted, aborting payment');
+      if (!isMounted.current) return;
+
+      if (paymentRetryCount.current >= MAX_PAYMENT_RETRIES) {
+        showError(
+          `Payment failed after ${MAX_PAYMENT_RETRIES} attempts. Please contact support.`,
+        );
         return;
       }
 
       setIsProcessingPayment(true);
 
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('💳 INITIATING RAZORPAY PAYMENT');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('Order ID:', orderDetails.orderId);
-      console.log('Amount: ₹', orderDetails.amount);
-
       const paymentResponse = await paymentApi.createPayment(
         orderDetails.orderId,
       );
-
-      if (!isMounted.current) {
-        console.log('⚠️ Component unmounted after creating payment');
-        return;
-      }
+      if (!isMounted.current) return;
 
       if (!paymentResponse.success) {
-        if (paymentResponse.message?.includes('Payment already initiated')) {
-          console.log('⚠️ Backend says payment already initiated');
-
-          showWarning(
-            'This order already has a pending payment. Please wait a few minutes and try again, or contact support if the issue persists.',
-            {
-              label: 'Contact Support',
-              onPress: () => {
-                try {
-                  navigation.navigate('Support');
-                } catch (err) {
-                  console.log('Navigation error:', err);
-                }
-              },
-            },
-          );
-
-          if (isMounted.current) {
-            setIsProcessingPayment(false);
-          }
-          return;
-        }
-
         throw new Error(paymentResponse.message || 'Failed to create payment');
       }
 
       const paymentData: CreatePaymentData = paymentResponse.data;
 
-      console.log('✅ Razorpay order created');
-      console.log('Razorpay Order ID:', paymentData.razorpay_order_id);
-
-      const razorpayOptions = {
+      const rzpOptions = {
         description: 'BMI Report Payment',
-        image: 'https://your-logo-url.com/logo.png',
         currency: paymentData.currency,
         key: paymentData.key_id,
         amount: paymentData.amount,
@@ -385,151 +476,259 @@ export default function PayScreen({ route, navigation }: Props) {
         theme: { color: '#7C3AED' },
       };
 
-      console.log('🌐 Opening Razorpay checkout...');
-
       isPaymentInProgress.current = true;
+      paymentRetryCount.current = 0;
 
-      try {
-        const razorpayResponse = await RazorpayCheckout.open(razorpayOptions);
-
-        isPaymentInProgress.current = false;
-
-        if (!isMounted.current) {
-          console.log('⚠️ Component unmounted after Razorpay success');
-          return;
-        }
-
-        console.log('✅ Payment successful!');
-        console.log('Payment ID:', razorpayResponse.razorpay_payment_id);
-
-        await verifyPaymentWithBackend(razorpayResponse);
-      } catch (razorpayError: any) {
-        isPaymentInProgress.current = false;
-        throw razorpayError;
-      }
-    } catch (error: any) {
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('❌ PAYMENT ERROR');
-      console.log('Error:', error);
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
+      const rzpResponse = await RazorpayCheckout.open(rzpOptions);
       isPaymentInProgress.current = false;
 
-      if (!isMounted.current) {
-        console.log('⚠️ Component unmounted, skipping error toast');
-        return;
-      }
+      await verifyPaymentWithBackend(rzpResponse);
+    } catch (error: any) {
+      isPaymentInProgress.current = false;
+      if (!isMounted.current) return;
 
-      if (error.code === 0) {
-        console.log('⚠️ User cancelled payment');
-        showWarning('You cancelled the payment. Your order is still pending.', {
-          label: 'Try Again',
-          onPress: () => {
-            if (isMounted.current) {
-              handlePayment();
-            }
-          },
-        });
-      } else if (error.code === 2) {
-        console.log('❌ Payment failed');
-        showError(
-          'Your payment failed. Please try again or use a different payment method.',
-          {
-            label: 'Retry',
-            onPress: () => {
-              if (isMounted.current) {
-                handlePayment();
+      paymentRetryCount.current += 1;
+      const payAttemptsLeft = MAX_PAYMENT_RETRIES - paymentRetryCount.current;
+
+      if (error.code === 0 || error.code === 5) {
+        showWarning(
+          'You cancelled the payment.',
+          payAttemptsLeft > 0
+            ? {
+                label: `Try Again (${payAttemptsLeft} left)`,
+                onPress: () => isMounted.current && handleRazorpayPayment(),
               }
-            },
-          },
+            : undefined,
         );
-      } else if (error.code === 5) {
-        console.log('⚠️ User cancelled payment (code 5)');
-        showError('You cancelled the payment. Your order is still pending.', {
-          label: 'Retry',
-          onPress: () => {
-            if (isMounted.current) {
-              handlePayment();
-            }
-          },
-        });
+      } else if (error.code === 2) {
+        showError(
+          'Payment failed. Please try a different method.',
+          payAttemptsLeft > 0
+            ? {
+                label: `Retry (${payAttemptsLeft} left)`,
+                onPress: () => isMounted.current && handleRazorpayPayment(),
+              }
+            : undefined,
+        );
       } else {
         showError(
           error.description ||
             error.message ||
             'An error occurred during payment',
+          payAttemptsLeft > 0
+            ? {
+                label: `Retry (${payAttemptsLeft} left)`,
+                onPress: () => isMounted.current && handleRazorpayPayment(),
+              }
+            : undefined,
         );
       }
-
-      if (isMounted.current) {
-        setIsProcessingPayment(false);
-      }
+    } finally {
+      if (isMounted.current) setIsProcessingPayment(false);
     }
   }, [
     orderDetails.orderId,
-    orderDetails.amount,
-    user?.mobile,
-    user?.name,
+    user,
     selectedUserName,
     showWarning,
     showError,
-    navigation,
     verifyPaymentWithBackend,
   ]);
 
-  /* 🎯 STICKY FOOTER WITH DYNAMIC BOTTOM INSET */
+  // ─── Any operation in progress ─────────────────────────────────────────────
+  const isAnyLoading =
+    isProcessingPayment ||
+    isVerifyingPayment ||
+    isPayingWithWallet ||
+    isPaymentInProgress.current ||
+    isLoadingBalance;
+
+  // ─── Render footer ─────────────────────────────────────────────────────────
   const renderFooter = useCallback(
     (props: any) => {
-      const bottomInset = insets.bottom > 0 ? insets.bottom : 0;
+      const botInset = insets.bottom > 0 ? insets.bottom : 0;
 
       return (
-        <BottomSheetFooter {...props} bottomInset={bottomInset}>
-          <View style={[styles.footerWrapper, { paddingBottom: bottomInset }]}>
+        <BottomSheetFooter {...props} bottomInset={botInset}>
+          <View style={[styles.footerWrapper, { paddingBottom: botInset }]}>
             <View style={styles.footer}>
-              <Pressable
-                style={[
-                  styles.payBtn,
-                  (isProcessingPayment ||
-                    isVerifyingPayment ||
-                    isPaymentInProgress.current) &&
-                    styles.payBtnDisabled,
-                ]}
-                onPress={handlePayment}
-                disabled={
-                  isProcessingPayment ||
-                  isVerifyingPayment ||
-                  isPaymentInProgress.current
-                }
-              >
-                {isProcessingPayment || isVerifyingPayment ? (
-                  <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                    <Text style={styles.payText}>
-                      {isVerifyingPayment
-                        ? 'Verifying...'
-                        : isPaymentInProgress.current
-                        ? 'In Razorpay...'
-                        : 'Processing...'}
+              {isLoadingBalance ? (
+                <View style={styles.balanceLoadingRow}>
+                  <ActivityIndicator size="small" color="#7C3AED" />
+                  <Text style={styles.balanceLoadingText}>
+                    Checking wallet balance...
+                  </Text>
+                </View>
+              ) : hasSufficientBal ? (
+                <>
+                  <View style={styles.walletInfoRow}>
+                    <Wallet size={14} color="#6EE7B7" />
+                    <Text style={styles.walletInfoText}>
+                      Wallet Balance: ₹{formatINR(walletBalance)}
                     </Text>
                   </View>
-                ) : (
-                  <Text style={styles.payText}>Pay ₹{orderDetails.amount}</Text>
-                )}
-              </Pressable>
+                  <Pressable
+                    style={[
+                      styles.payBtn,
+                      styles.payBtnWallet,
+                      isAnyLoading && styles.payBtnDisabled,
+                    ]}
+                    onPress={handleWalletPay}
+                    disabled={isAnyLoading}
+                  >
+                    {isPayingWithWallet ? (
+                      <View style={styles.loadingRow}>
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                        <Text style={styles.payText}>
+                          Paying from Wallet...
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.loadingRow}>
+                        <Wallet size={18} color="#FFFFFF" />
+                        <Text style={styles.payText}>
+                          Pay ₹{orderDetails.amount} from Wallet
+                        </Text>
+                      </View>
+                    )}
+                  </Pressable>
+                  <Pressable
+                    style={[
+                      styles.payBtnSecondary,
+                      isAnyLoading && styles.payBtnDisabled,
+                    ]}
+                    onPress={handleRazorpayPayment}
+                    disabled={isAnyLoading}
+                  >
+                    {isProcessingPayment || isVerifyingPayment ? (
+                      <View style={styles.loadingRow}>
+                        <ActivityIndicator size="small" color="#C4B5FD" />
+                        <Text style={styles.payTextSecondary}>
+                          {isVerifyingPayment
+                            ? 'Verifying...'
+                            : 'Processing...'}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.loadingRow}>
+                        <CreditCard size={16} color="#C4B5FD" />
+                        <Text style={styles.payTextSecondary}>
+                          Pay with Razorpay instead
+                        </Text>
+                      </View>
+                    )}
+                  </Pressable>
+                </>
+              ) : topUpCompleted && refreshedAfterTopUp && hasSufficientBal ? (
+                <>
+                  <View style={styles.walletInfoRow}>
+                    <Wallet size={14} color="#6EE7B7" />
+                    <Text style={styles.walletInfoText}>
+                      Wallet topped up! Balance: ₹{formatINR(walletBalance)}
+                    </Text>
+                  </View>
+                  <Pressable
+                    style={[
+                      styles.payBtn,
+                      styles.payBtnWallet,
+                      isAnyLoading && styles.payBtnDisabled,
+                    ]}
+                    onPress={handleWalletPay}
+                    disabled={isAnyLoading}
+                  >
+                    {isPayingWithWallet ? (
+                      <View style={styles.loadingRow}>
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                        <Text style={styles.payText}>
+                          Paying from Wallet...
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.loadingRow}>
+                        <Wallet size={18} color="#FFFFFF" />
+                        <Text style={styles.payText}>
+                          Confirm — Pay ₹{orderDetails.amount} from Wallet
+                        </Text>
+                      </View>
+                    )}
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  <View style={styles.shortfallRow}>
+                    <AlertCircle size={14} color="#FCD34D" />
+                    <Text style={styles.shortfallText}>
+                      Wallet: ₹{formatINR(walletBalance)} · Need ₹
+                      {formatINR(orderDetails.amount - walletBalance)} more
+                    </Text>
+                  </View>
+                  <Pressable
+                    style={[
+                      styles.payBtn,
+                      isAnyLoading && styles.payBtnDisabled,
+                    ]}
+                    onPress={handleRazorpayPayment}
+                    disabled={isAnyLoading}
+                  >
+                    {isProcessingPayment || isVerifyingPayment ? (
+                      <View style={styles.loadingRow}>
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                        <Text style={styles.payText}>
+                          {isVerifyingPayment
+                            ? 'Verifying...'
+                            : 'Processing...'}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.loadingRow}>
+                        <CreditCard size={18} color="#FFFFFF" />
+                        <Text style={styles.payText}>
+                          Pay ₹{orderDetails.amount} instantly
+                        </Text>
+                      </View>
+                    )}
+                  </Pressable>
+                  <Pressable
+                    style={[
+                      styles.payBtnSecondary,
+                      isAnyLoading && styles.payBtnDisabled,
+                    ]}
+                    onPress={handleTopUpWallet}
+                    disabled={isAnyLoading}
+                  >
+                    <View style={styles.loadingRow}>
+                      <Wallet size={16} color="#C4B5FD" />
+                      <Text style={styles.payTextSecondary}>
+                        Top up Wallet & pay after
+                      </Text>
+                    </View>
+                  </Pressable>
+                </>
+              )}
             </View>
           </View>
         </BottomSheetFooter>
       );
     },
     [
+      insets.bottom,
+      isLoadingBalance,
+      hasSufficientBal,
+      walletBalance,
       orderDetails.amount,
+      isAnyLoading,
+      isPayingWithWallet,
       isProcessingPayment,
       isVerifyingPayment,
-      insets.bottom,
-      handlePayment,
+      topUpCompleted,
+      refreshedAfterTopUp,
+      handleWalletPay,
+      handleRazorpayPayment,
+      handleTopUpWallet,
     ],
   );
 
+  // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <GestureHandlerRootView style={styles.container}>
       <ErrorToast
@@ -547,6 +746,7 @@ export default function PayScreen({ route, navigation }: Props) {
         enablePanDownToClose={
           !isProcessingPayment &&
           !isVerifyingPayment &&
+          !isPayingWithWallet &&
           !isPaymentInProgress.current
         }
         backdropComponent={renderBackdrop}
@@ -557,15 +757,15 @@ export default function PayScreen({ route, navigation }: Props) {
           if (
             !isProcessingPayment &&
             !isVerifyingPayment &&
-            !isPaymentInProgress.current
+            !isPayingWithWallet &&
+            !isPaymentInProgress.current &&
+            isMounted.current &&
+            navigation.canGoBack()
           ) {
-            if (isMounted.current && navigation.canGoBack()) {
-              navigation.goBack();
-            }
+            navigation.goBack();
           }
         }}
       >
-        {/* SCROLLABLE CONTENT */}
         <BottomSheetScrollView
           contentContainerStyle={[
             styles.contentContainer,
@@ -573,7 +773,6 @@ export default function PayScreen({ route, navigation }: Props) {
           ]}
           showsVerticalScrollIndicator={false}
         >
-          {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>Click & Pay</Text>
             <Text style={styles.subtitle}>
@@ -581,29 +780,25 @@ export default function PayScreen({ route, navigation }: Props) {
             </Text>
           </View>
 
-          {/* Order Card */}
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Hash size={18} color="#7C3AED" />
               <Text style={styles.cardTitle}>Order Details</Text>
             </View>
-
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Order ID</Text>
               <Text style={styles.detailValue}>{orderDetails.orderId}</Text>
             </View>
-
             <View style={styles.detailRow}>
               <View style={styles.detailLabelRow}>
                 <User size={14} color="#94A3B8" />
-                <Text style={styles.detailLabel}>User Details</Text>
+                <Text style={styles.detailLabel}>User</Text>
               </View>
               <Text style={styles.detailValue}>
                 {user?.name || selectedUserName}, {user?.age || 'N/A'}/
                 {user?.gender || 'N/A'}
               </Text>
             </View>
-
             <View style={styles.detailRow}>
               <View style={styles.detailLabelRow}>
                 <Calendar size={14} color="#94A3B8" />
@@ -611,7 +806,6 @@ export default function PayScreen({ route, navigation }: Props) {
               </View>
               <Text style={styles.detailValue}>{orderDetails.timestamp}</Text>
             </View>
-
             <View style={[styles.detailRow, { borderBottomWidth: 0 }]}>
               <View style={styles.detailLabelRow}>
                 <Wallet size={14} color="#94A3B8" />
@@ -621,7 +815,6 @@ export default function PayScreen({ route, navigation }: Props) {
             </View>
           </View>
 
-          {/* Payment Info */}
           <View style={styles.infoCard}>
             <Text style={styles.infoText}>
               🔒 Secure payment powered by Razorpay
@@ -636,45 +829,19 @@ export default function PayScreen({ route, navigation }: Props) {
   );
 }
 
-/* ================= STYLES ================= */
-
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-
+  container: { flex: 1 },
   sheetBackground: {
     backgroundColor: '#0F172A',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
   },
-
-  handleIndicator: {
-    backgroundColor: '#475569',
-    width: 40,
-  },
-
-  contentContainer: {
-    paddingHorizontal: 16,
-    // paddingBottom is now dynamic - applied inline
-  },
-
-  header: {
-    paddingVertical: 16,
-  },
-
-  title: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-
-  subtitle: {
-    fontSize: 14,
-    color: '#94A3B8',
-    marginTop: 4,
-  },
-
+  handleIndicator: { backgroundColor: '#475569', width: 40 },
+  contentContainer: { paddingHorizontal: 16 },
+  header: { paddingVertical: 16 },
+  title: { fontSize: 26, fontWeight: '800', color: '#FFFFFF' },
+  subtitle: { fontSize: 14, color: '#94A3B8', marginTop: 4 },
   card: {
     backgroundColor: '#020617',
     borderRadius: 16,
@@ -683,20 +850,13 @@ const styles = StyleSheet.create({
     borderColor: '#1E293B',
     marginBottom: 16,
   },
-
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginBottom: 16,
   },
-
-  cardTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#CBD5E1',
-  },
-
+  cardTitle: { fontSize: 14, fontWeight: '700', color: '#CBD5E1' },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -705,18 +865,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#1E293B',
   },
-
-  detailLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-
-  detailLabel: {
-    fontSize: 13,
-    color: '#94A3B8',
-  },
-
+  detailLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  detailLabel: { fontSize: 13, color: '#94A3B8' },
   detailValue: {
     fontSize: 13,
     fontWeight: '600',
@@ -724,71 +874,68 @@ const styles = StyleSheet.create({
     maxWidth: '55%',
     textAlign: 'right',
   },
-
-  amount: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#7C3AED',
-  },
-
+  amount: { fontSize: 14, fontWeight: '800', color: '#7C3AED' },
   infoCard: {
-    backgroundColor: 'rgba(124, 58, 237, 0.1)',
+    backgroundColor: 'rgba(124,58,237,0.1)',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(124, 58, 237, 0.3)',
+    borderColor: 'rgba(124,58,237,0.3)',
   },
-
   infoText: {
     fontSize: 13,
     fontWeight: '600',
     color: '#C4B5FD',
     marginBottom: 4,
   },
-
-  infoSubtext: {
-    fontSize: 11,
-    color: '#94A3B8',
-  },
-
-  // 🎯 FIXED: Solid background with proper z-index to block scroll content
+  infoSubtext: { fontSize: 11, color: '#94A3B8' },
   footerWrapper: {
     backgroundColor: '#0F172A',
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: '#1E293B',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
     elevation: 20,
   },
-
-  footer: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-
-  payBtn: {
-    backgroundColor: '#7C3AED',
-    paddingVertical: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-  },
-
-  payBtnDisabled: {
-    backgroundColor: '#475569',
-  },
-
-  loadingContainer: {
+  footer: { paddingHorizontal: 16, paddingBottom: 12, gap: 10 },
+  balanceLoadingRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
+    paddingVertical: 12,
   },
-
-  payText: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '800',
+  balanceLoadingText: { color: '#94A3B8', fontSize: 13 },
+  walletInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
   },
+  walletInfoText: { color: '#6EE7B7', fontSize: 12, fontWeight: '600' },
+  shortfallRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+  },
+  shortfallText: { color: '#FCD34D', fontSize: 12, fontWeight: '600' },
+  payBtn: {
+    borderRadius: 16,
+    backgroundColor: '#7C3AED',
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  payBtnWallet: { backgroundColor: '#059669' },
+  payBtnDisabled: { opacity: 0.45 },
+  payText: { color: '#FFFFFF', fontSize: 17, fontWeight: '800' },
+  payBtnSecondary: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(196,181,253,0.4)',
+    backgroundColor: 'rgba(124,58,237,0.1)',
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  payTextSecondary: { color: '#C4B5FD', fontSize: 15, fontWeight: '700' },
+  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 });

@@ -1,5 +1,5 @@
-// components/common/Drawer.tsx
-import React from "react";
+// components/common/Drawer.tsx - FIXED: Responsive with Safe Area
+import React, { useMemo } from "react";
 import {
   View,
   StyleSheet,
@@ -7,6 +7,7 @@ import {
   ScrollView,
   Modal,
 } from "react-native";
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface DrawerProps {
   open: boolean;
@@ -16,6 +17,15 @@ interface DrawerProps {
 }
 
 const Drawer: React.FC<DrawerProps> = ({ open, onClose, children, footer }) => {
+  // 🎯 DYNAMIC safe area for all devices
+  const insets = useSafeAreaInsets();
+
+  // 🎯 Calculate responsive padding
+  const drawerPadding = useMemo(() => ({
+    paddingTop: insets.top > 0 ? insets.top + 16 : 16,
+    paddingBottom: insets.bottom > 0 ? insets.bottom + 12 : 20,
+  }), [insets.top, insets.bottom]);
+
   if (!open) return null;
 
   return (
@@ -24,7 +34,7 @@ const Drawer: React.FC<DrawerProps> = ({ open, onClose, children, footer }) => {
       <Pressable style={styles.overlay} onPress={onClose} />
 
       {/* Drawer */}
-      <View style={styles.drawer}>
+      <View style={[styles.drawer, { paddingTop: drawerPadding.paddingTop }]}>
         {/* Scrollable content */}
         <ScrollView 
           showsVerticalScrollIndicator={false}
@@ -34,7 +44,11 @@ const Drawer: React.FC<DrawerProps> = ({ open, onClose, children, footer }) => {
         </ScrollView>
 
         {/* Footer (Logout + Version) */}
-        {footer && <View style={styles.footer}>{footer}</View>}
+        {footer && (
+          <View style={[styles.footer, { paddingBottom: drawerPadding.paddingBottom }]}>
+            {footer}
+          </View>
+        )}
       </View>
     </Modal>
   );
@@ -55,7 +69,7 @@ const styles = StyleSheet.create({
     width: 280,
     height: "100%",
     backgroundColor: "#020617",
-    paddingTop: 16,
+    // paddingTop is now dynamic - applied inline
   },
   scrollContent: {
     flexGrow: 1,
@@ -65,6 +79,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#1E293B",
     paddingTop: 12,
-    paddingBottom: 20,
+    // paddingBottom is now dynamic - applied inline
   },
 });

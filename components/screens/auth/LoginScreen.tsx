@@ -57,6 +57,7 @@ type Props = {
 export default function LoginScreen({ navigation }: Props) {
   const isMounted = useRef(true);
   const appState = useRef(AppState.currentState);
+  const isVerifying = useRef(false);
 
   const dispatch = useDispatch<AppDispatch>();
   const { isLoading, error, otpSent } = useSelector(
@@ -80,18 +81,10 @@ export default function LoginScreen({ navigation }: Props) {
 
   const canSendOtp = useMemo(() => isValidIndianMobile(phone), [phone]);
 
-  // ✅ FIX 1: Reset invalid OTP session on mount
   useEffect(() => {
     console.log('🔍 Checking OTP session validity...');
-    
-    // If Redux says OTP was sent, but we don't have reqId
-    // This means app was restarted after OTP was sent
     if (otpSent && !reqId) {
       console.log('⚠️ Invalid OTP session detected - resetting to phone input');
-      console.log('Redux otpSent:', otpSent);
-      console.log('Component reqId:', reqId);
-      
-      // Reset to initial state
       dispatch(setOtpSent(false));
       setOtp('');
       setOtpError('');
@@ -100,9 +93,8 @@ export default function LoginScreen({ navigation }: Props) {
       setIsEditingPhone(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run only on mount
+  }, []);
 
-  // ✅ FIX 2: Handle app coming back from background
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextAppState => {
       if (
@@ -110,32 +102,27 @@ export default function LoginScreen({ navigation }: Props) {
         nextAppState === 'active'
       ) {
         console.log('📱 App came to foreground');
-        
-        // Check if OTP session is still valid
         if (otpSent && !reqId) {
           console.log('⚠️ OTP session lost after backgrounding - resetting');
           dispatch(setOtpSent(false));
           setOtp('');
           setOtpError('');
           setResendTimer(0);
-          
           showInfo('OTP session expired. Please request a new OTP.');
         }
       }
-      
       appState.current = nextAppState;
     });
-
     return () => {
       subscription.remove();
     };
-  }, [otpSent, reqId, dispatch, showInfo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleOpenURL = useCallback(
     async (url: string, title: string) => {
       try {
         const supported = await Linking.canOpenURL(url);
-
         if (supported) {
           await Linking.openURL(url);
         } else {
@@ -191,7 +178,6 @@ export default function LoginScreen({ navigation }: Props) {
 
   const handleEditPhone = useCallback(() => {
     console.log('✏️ User wants to edit phone number');
-
     dispatch(setOtpSent(false));
     setOtp('');
     setOtpError('');
@@ -203,10 +189,7 @@ export default function LoginScreen({ navigation }: Props) {
 
   useEffect(() => {
     isMounted.current = true;
-
     console.log('🔐 LoginScreen: Component mounted');
-    console.log('🔐 Initializing MSG91 Widget...');
-
     try {
       OTPWidget.initializeWidget(MSG91_WIDGET_ID, MSG91_TOKEN_AUTH);
       console.log('✅ MSG91 Widget initialized successfully');
@@ -214,7 +197,6 @@ export default function LoginScreen({ navigation }: Props) {
       console.log('❌ Failed to initialize MSG91 Widget:', err);
       showError('Failed to initialize OTP service. Please restart the app.');
     }
-
     return () => {
       console.log('🧹 LoginScreen: Unmounting...');
       isMounted.current = false;
@@ -224,21 +206,17 @@ export default function LoginScreen({ navigation }: Props) {
   useEffect(() => {
     const backAction = () => {
       console.log('⬅️ HARDWARE BACK: LoginScreen');
-
       if (otpSent && !isLoading) {
         console.log('📱 Going back to phone number editing');
         handleEditPhone();
         return true;
       }
-
       return false;
     };
-
     const backHandler = BackHandler.addEventListener(
       'hardwareBackPress',
       backAction,
     );
-
     return () => backHandler.remove();
   }, [otpSent, isLoading, handleEditPhone]);
 
@@ -258,7 +236,6 @@ export default function LoginScreen({ navigation }: Props) {
 
   useEffect(() => {
     if (TEST_MODE_ENABLED && phone === TEST_MOBILE) {
-      console.log('🧪 TEST MODE DETECTED');
       setIsTestMode(true);
     } else {
       setIsTestMode(false);
@@ -267,102 +244,58 @@ export default function LoginScreen({ navigation }: Props) {
 
   const handleTestModeSendOtp = () => {
     if (!isMounted.current) return;
-
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('🧪 TEST MODE: Sending Test OTP');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
     const testReqId = 'TEST_' + Date.now();
     setReqId(testReqId);
-
     dispatch(setOtpSent(true));
     setIsEditingPhone(false);
     setResendTimer(60);
-
     showInfo(
       `🧪 Test Mode Active\n\nTest OTP: ${TEST_OTP}\n\nEnter this OTP to login.`,
     );
   };
 
   const handleSendOtp = async () => {
-    console.log('📤 Sending OTP to:', phone);
-
-    if (!isMounted.current) {
-      console.log('⚠️ Component unmounted, aborting OTP send');
-      return;
-    }
-
+    if (!isMounted.current) return;
     setPhoneError('');
     setOtpError('');
-
     if (!phone.trim()) {
       setPhoneError('Please enter your mobile number');
       return;
     }
-
     if (!isValidIndianMobile(phone)) {
       setPhoneError('Please enter a valid 10-digit mobile number');
       return;
     }
-
-    // ✅ Check network connectivity BEFORE sending OTP
     const isOnline = await checkNetworkConnectivity();
     if (!isOnline) {
       showError(
         'No internet connection. Please check your WiFi or mobile data and try again.',
-        {
-          label: 'Retry',
-          onPress: () => handleSendOtp(),
-        }
+        { label: 'Retry', onPress: () => handleSendOtp() },
       );
       return;
     }
-
     if (isTestMode) {
       handleTestModeSendOtp();
       return;
     }
-
     try {
-      const data = {
-        identifier: `91${phone}`,
-      };
-
-      console.log('📱 Calling MSG91 sendOTP...');
-      const response = await OTPWidget.sendOTP(data);
-
-      if (!isMounted.current) {
-        console.log('⚠️ Component unmounted after OTP send');
-        return;
-      }
-
-      console.log('✅ MSG91 Response:', response);
-
+      const response = await OTPWidget.sendOTP({ identifier: `91${phone}` });
+      if (!isMounted.current) return;
       if (response.type === 'success') {
-        const hexReqId = response.message;
-        console.log('✅ Storing HEX reqId:', hexReqId);
-        setReqId(hexReqId);
-
+        setReqId(response.message);
         dispatch(setOtpSent(true));
         setIsEditingPhone(false);
         setResendTimer(60);
-
         showSuccess('OTP sent successfully! Please check your WhatsApp.');
       } else {
         throw new Error(response.message || 'Failed to send OTP');
       }
     } catch (err: any) {
-      console.log('❌ Send OTP error:', err);
-
       if (isMounted.current) {
-        // Check if it's a network error
-        if (err.message && err.message.toLowerCase().includes('network')) {
+        if (err.message?.toLowerCase().includes('network')) {
           showError(
             'Network error. Please check your internet connection and try again.',
-            {
-              label: 'Retry',
-              onPress: () => handleSendOtp(),
-            }
+            { label: 'Retry', onPress: () => handleSendOtp() },
           );
         } else {
           setPhoneError(err.message || 'Failed to send OTP. Please try again.');
@@ -372,70 +305,38 @@ export default function LoginScreen({ navigation }: Props) {
   };
 
   const handleResendOtp = async () => {
-    if (resendTimer > 0) return;
-
-    if (!isMounted.current) {
-      console.log('⚠️ Component unmounted, aborting resend');
-      return;
-    }
-
-    console.log('🔄 Resending OTP...');
+    if (resendTimer > 0 || !isMounted.current) return;
     setOtpError('');
     setOtp('');
     setReqId(null);
-
-    // ✅ Check network connectivity BEFORE resending OTP
     const isOnline = await checkNetworkConnectivity();
     if (!isOnline) {
       showError(
         'No internet connection. Please check your WiFi or mobile data and try again.',
-        {
-          label: 'Retry',
-          onPress: () => handleResendOtp(),
-        }
+        { label: 'Retry', onPress: () => handleResendOtp() },
       );
       return;
     }
-
     if (isTestMode) {
       handleTestModeSendOtp();
       return;
     }
-
     try {
-      const data = {
-        identifier: `91${phone}`,
-      };
-
-      const response = await OTPWidget.sendOTP(data);
-
-      if (!isMounted.current) {
-        console.log('⚠️ Component unmounted after resend');
-        return;
-      }
-
+      const response = await OTPWidget.sendOTP({ identifier: `91${phone}` });
+      if (!isMounted.current) return;
       if (response.type === 'success') {
-        const hexReqId = response.message;
-        console.log('✅ New HEX reqId:', hexReqId);
-        setReqId(hexReqId);
+        setReqId(response.message);
         setResendTimer(60);
-
         showSuccess('New OTP sent! Please check your WhatsApp.');
       } else {
         throw new Error(response.message || 'Failed to resend OTP');
       }
     } catch (err: any) {
-      console.log('❌ Resend OTP error:', err);
-
       if (isMounted.current) {
-        // Check if it's a network error
-        if (err.message && err.message.toLowerCase().includes('network')) {
+        if (err.message?.toLowerCase().includes('network')) {
           showError(
             'Network error. Please check your internet connection and try again.',
-            {
-              label: 'Retry',
-              onPress: () => handleResendOtp(),
-            }
+            { label: 'Retry', onPress: () => handleResendOtp() },
           );
         } else {
           setOtpError(err.message || 'Failed to resend OTP. Please try again.');
@@ -445,113 +346,63 @@ export default function LoginScreen({ navigation }: Props) {
   };
 
   const handleVerifyTestOtp = async () => {
-    if (!isMounted.current) {
-      console.log('⚠️ Component unmounted, aborting verify');
-      return;
-    }
-
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('🧪 TEST MODE: Verifying Test OTP');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
+    if (!isMounted.current) return;
     if (otp !== TEST_OTP) {
       setOtpError(`Invalid OTP. Test OTP is: ${TEST_OTP}`);
       return;
     }
-
-    console.log('✅ Test OTP verified! Logging in...');
-
     const testAccessToken = `test_token_${phone}_${Date.now()}`;
-
     const resultAction = await dispatch(
-      verifyLogin({
-        accessToken: testAccessToken,
-        mobile: phone,
-      }),
+      verifyLogin({ accessToken: testAccessToken, mobile: phone }),
     );
-
-    if (!isMounted.current) {
-      console.log('⚠️ Component unmounted after test login');
-      return;
-    }
-
+    if (!isMounted.current) return;
     if (verifyLogin.fulfilled.match(resultAction)) {
-      console.log('✅ Test login successful!');
-
       const userData = resultAction.payload;
-
-      if (userData.requiresProfileSetup) {
-        console.log('📝 Redirecting to profile setup...');
-        navigation.replace('CompleteProfile');
-      } else {
-        console.log('🏠 Redirecting to home...');
-        navigation.replace('App');
-      }
+      navigation.replace(
+        userData.requiresProfileSetup ? 'CompleteProfile' : 'App',
+      );
     } else {
       setOtpError('Login failed. Please try again.');
     }
   };
 
   const handleVerifyOtp = async () => {
-    console.log('🔐 Verifying OTP...');
-
-    if (!isMounted.current) {
-      console.log('⚠️ Component unmounted, aborting verify');
-      return;
-    }
-
+    if (isVerifying.current) return;
+    isVerifying.current = true;
+    if (!isMounted.current) return;
     setOtpError('');
-
     if (!otp.trim()) {
       setOtpError('Please enter the OTP');
+      isVerifying.current = false;
       return;
     }
-
     if (otp.length < 4) {
       setOtpError('Please enter a valid OTP (4-6 digits)');
+      isVerifying.current = false;
       return;
     }
-
     if (isTestMode) {
       await handleVerifyTestOtp();
+      isVerifying.current = false;
       return;
     }
-
     if (!reqId) {
       setOtpError('Session expired. Please resend OTP.');
+      isVerifying.current = false;
       return;
     }
-
-    // ✅ Check network connectivity BEFORE verifying OTP
     const isOnline = await checkNetworkConnectivity();
     if (!isOnline) {
-      showError(
-        'No internet connection. Please check your WiFi or mobile data and try again.',
-        {
-          label: 'Retry',
-          onPress: () => handleVerifyOtp(),
-        }
-      );
+      showError('No internet connection.', {
+        label: 'Retry',
+        onPress: () => handleVerifyOtp(),
+      });
+      isVerifying.current = false;
       return;
     }
-
     try {
-      const verifyData = {
-        reqId: reqId,
-        otp: otp,
-      };
-
-      console.log('🔍 Verifying with HEX reqId:', reqId);
-
-      const verifyResponse = await OTPWidget.verifyOTP(verifyData);
-
-      if (!isMounted.current) {
-        console.log('⚠️ Component unmounted after OTP verify');
-        return;
-      }
-
-      console.log('✅ Verify response:', verifyResponse);
-
+      const verifyResponse = await OTPWidget.verifyOTP({ reqId, otp });
+      if (!isMounted.current) return;
       if (verifyResponse.type === 'success') {
         const accessToken =
           verifyResponse.message ||
@@ -559,50 +410,26 @@ export default function LoginScreen({ navigation }: Props) {
           verifyResponse['access-token'] ||
           verifyResponse.data?.accessToken ||
           verifyResponse.data?.['access-token'];
-
-        console.log('✅ Got access token from MSG91');
-
         if (!accessToken) {
           setOtpError('No access token received. Please try again.');
           return;
         }
-
-        console.log('🔑 Sending token to backend for login...');
-
         const resultAction = await dispatch(
-          verifyLogin({
-            accessToken: accessToken,
-            mobile: phone,
-          }),
+          verifyLogin({ accessToken, mobile: phone }),
         );
-
-        if (!isMounted.current) {
-          console.log('⚠️ Component unmounted after backend login');
-          return;
-        }
-
+        if (!isMounted.current) return;
         if (verifyLogin.fulfilled.match(resultAction)) {
-          console.log('✅ Login successful!');
-
           const userData = resultAction.payload;
-
-          if (userData.requiresProfileSetup) {
-            console.log('📝 Redirecting to profile setup...');
-            navigation.replace('CompleteProfile');
-          } else {
-            console.log('🏠 Redirecting to home...');
-            navigation.replace('App');
-          }
+          navigation.replace(
+            userData.requiresProfileSetup ? 'CompleteProfile' : 'App',
+          );
         } else {
           setOtpError('Login failed. Please try again.');
         }
       } else {
         if (verifyResponse.code === 708) {
           setOtpError('OTP session expired. Please request a new OTP.');
-        } else if (
-          verifyResponse.message &&
-          verifyResponse.message.toLowerCase().includes('invalid')
-        ) {
+        } else if (verifyResponse.message?.toLowerCase().includes('invalid')) {
           setOtpError('Invalid OTP. Please check and try again.');
         } else {
           setOtpError(
@@ -611,29 +438,22 @@ export default function LoginScreen({ navigation }: Props) {
         }
       }
     } catch (err: any) {
-      console.log('❌ Verify OTP error:', err);
-
       if (isMounted.current) {
-        // Check if it's a network error
-        if (err.message && err.message.toLowerCase().includes('network')) {
-          showError(
-            'Network error. Please check your internet connection and try again.',
-            {
-              label: 'Retry',
-              onPress: () => handleVerifyOtp(),
-            }
-          );
-        } else if (err.message && err.message.toLowerCase().includes('invalid')) {
+        if (err.message?.toLowerCase().includes('network')) {
+          showError('Network error.', {
+            label: 'Retry',
+            onPress: () => handleVerifyOtp(),
+          });
+        } else if (err.message?.toLowerCase().includes('invalid')) {
           setOtpError('Invalid OTP. Please check and try again.');
-        } else if (
-          err.message &&
-          err.message.toLowerCase().includes('expired')
-        ) {
+        } else if (err.message?.toLowerCase().includes('expired')) {
           setOtpError('OTP expired. Please request a new one.');
         } else {
           setOtpError('Verification failed. Please try again.');
         }
       }
+    } finally {
+      isVerifying.current = false;
     }
   };
 
@@ -641,7 +461,6 @@ export default function LoginScreen({ navigation }: Props) {
     setPhone(text);
     if (phoneError) setPhoneError('');
   };
-
   const handleOtpChange = (text: string) => {
     setOtp(text);
     if (otpError) setOtpError('');
@@ -677,7 +496,6 @@ export default function LoginScreen({ navigation }: Props) {
       >
         <View style={styles.mainContent}>
           <View style={styles.header}>
-            <StatusBar barStyle="light-content" />
             <Image
               source={require('../../../assets/images/mysehat_icon.png')}
               style={styles.logo}
@@ -711,7 +529,6 @@ export default function LoginScreen({ navigation }: Props) {
                 maxLength={10}
                 editable={!otpSent || isEditingPhone}
               />
-
               {otpSent && !isEditingPhone && (
                 <Pressable
                   onPress={handleEditPhone}
@@ -730,8 +547,7 @@ export default function LoginScreen({ navigation }: Props) {
             {isTestMode && !otpSent && (
               <View style={styles.testModeAlert}>
                 <Text style={styles.testModeAlertText}>
-                  🧪 Test Mode Active{'\n'}
-                  For Google Play Console testing
+                  🧪 Test Mode Active{'\n'}For Google Play Console testing
                 </Text>
               </View>
             )}
@@ -765,11 +581,9 @@ export default function LoginScreen({ navigation }: Props) {
                 maxLength={6}
                 autoFocus={otpSent && !isEditingPhone}
               />
-
               {otpError ? (
                 <Text style={styles.errorText}>{otpError}</Text>
               ) : null}
-
               {isTestMode && (
                 <View style={styles.testOtpHint}>
                   <Text style={styles.testOtpHintText}>
@@ -777,7 +591,6 @@ export default function LoginScreen({ navigation }: Props) {
                   </Text>
                 </View>
               )}
-
               <Pressable
                 onPress={handleResendOtp}
                 disabled={resendTimer > 0 || isLoading}
@@ -796,7 +609,6 @@ export default function LoginScreen({ navigation }: Props) {
                     : 'Resend OTP'}
                 </Text>
               </Pressable>
-
               <Pressable
                 onPress={handleVerifyOtp}
                 disabled={
@@ -835,6 +647,17 @@ export default function LoginScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.footer}>
+          {/* ✅ NEW: Partner Login Link */}
+          <Pressable
+            onPress={() => navigation.navigate('PartnerLogin')}
+            style={styles.partnerLoginBtn}
+          >
+            <Text style={styles.partnerLoginText}>
+              Are you a Partner?{' '}
+              <Text style={styles.partnerLoginLink}>Login as Partner →</Text>
+            </Text>
+          </Pressable>
+
           <Text style={styles.footerText}>
             By continuing, you agree to our{' '}
             <Text
@@ -864,34 +687,12 @@ export default function LoginScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#0B0B0F',
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'space-between',
-    padding: 20,
-  },
-  mainContent: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  title: {
-    color: '#FFF',
-    fontSize: 28,
-    fontWeight: '800',
-    marginTop: 16,
-  },
-  subtitle: {
-    color: '#9CA3AF',
-    marginTop: 6,
-    fontSize: 14,
-  },
+  root: { flex: 1, backgroundColor: '#0B0B0F' },
+  scrollContent: { flexGrow: 1, justifyContent: 'space-between', padding: 20 },
+  mainContent: { flex: 1, justifyContent: 'center' },
+  header: { alignItems: 'center', marginBottom: 32 },
+  title: { color: '#FFF', fontSize: 28, fontWeight: '800', marginTop: 16 },
+  subtitle: { color: '#9CA3AF', marginTop: 6, fontSize: 14 },
   card: {
     backgroundColor: '#111827',
     borderColor: '#1F2937',
@@ -899,12 +700,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 16,
   },
-  label: {
-    color: '#D1D5DB',
-    marginBottom: 8,
-    fontWeight: '600',
-    fontSize: 13,
-  },
+  label: { color: '#D1D5DB', marginBottom: 8, fontWeight: '600', fontSize: 13 },
   input: {
     backgroundColor: '#0F172A',
     borderColor: '#1F2937',
@@ -924,36 +720,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 12,
   },
-  logo: {
-    width: 160,
-    height: 90,
-  },
+  logo: { width: 160, height: 90 },
   prefix: {
     color: '#9CA3AF',
     marginRight: 10,
     fontWeight: '700',
     fontSize: 15,
   },
-  inputPhone: {
-    flex: 1,
-    paddingVertical: 12,
-    color: '#FFF',
-    fontSize: 15,
-  },
-  editIconBtn: {
-    padding: 8,
-    marginLeft: 4,
-  },
-  inputError: {
-    borderColor: '#EF4444',
-    borderWidth: 1,
-  },
-  errorText: {
-    color: '#EF4444',
-    fontSize: 12,
-    marginTop: 6,
-    marginLeft: 4,
-  },
+  inputPhone: { flex: 1, paddingVertical: 12, color: '#FFF', fontSize: 15 },
+  editIconBtn: { padding: 8, marginLeft: 4 },
+  inputError: { borderColor: '#EF4444', borderWidth: 1 },
+  errorText: { color: '#EF4444', fontSize: 12, marginTop: 6, marginLeft: 4 },
   primaryBtn: {
     marginTop: 14,
     backgroundColor: '#7C3AED',
@@ -961,33 +738,21 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
   },
-  primaryBtnText: {
-    color: '#FFF',
-    fontWeight: '800',
-    fontSize: 15,
-  },
-  btnDisabled: {
-    opacity: 0.5,
-  },
+  primaryBtnText: { color: '#FFF', fontWeight: '800', fontSize: 15 },
+  btnDisabled: { opacity: 0.5 },
   resendBtn: {
     marginTop: 10,
     marginBottom: 4,
     paddingVertical: 8,
     alignItems: 'flex-start',
   },
-  resendText: {
-    color: '#F97316',
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  resendTextDisabled: {
-    color: '#6B7280',
-  },
-  footer: {
-    marginTop: 24,
-    paddingTop: 20,
-    alignItems: 'center',
-  },
+  resendText: { color: '#F97316', fontWeight: '600', fontSize: 13 },
+  resendTextDisabled: { color: '#6B7280' },
+  footer: { marginTop: 24, paddingTop: 20, alignItems: 'center', gap: 12 },
+  // ✅ NEW Partner Login styles
+  partnerLoginBtn: { paddingVertical: 6 },
+  partnerLoginText: { color: '#6B7280', fontSize: 13 },
+  partnerLoginLink: { color: '#7C3AED', fontWeight: '700' },
   footerText: {
     textAlign: 'center',
     color: '#6B7280',
@@ -995,15 +760,11 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     paddingHorizontal: 10,
   },
-  footerLink: {
-    color: '#F97316',
-    fontWeight: '700',
-  },
+  footerLink: { color: '#F97316', fontWeight: '700' },
   versionText: {
     textAlign: 'center',
     color: '#4B5563',
     fontSize: 11,
-    marginTop: 12,
     fontWeight: '500',
   },
   loaderOverlay: {
@@ -1020,13 +781,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1F2937',
   },
-  testModeInput: {
-    borderColor: '#10B981',
-    borderWidth: 2,
-  },
-  testModeButton: {
-    backgroundColor: '#10B981',
-  },
+  testModeInput: { borderColor: '#10B981', borderWidth: 2 },
+  testModeButton: { backgroundColor: '#10B981' },
   testModeAlert: {
     backgroundColor: 'rgba(16, 185, 129, 0.1)',
     borderColor: '#10B981',
@@ -1055,11 +811,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
-  btnPressed: {
-    opacity: 0.7,
-    transform: [{ scale: 0.98 }],
-  },
-  otpSectionContainer: {
-    overflow: 'hidden',
-  },
+  btnPressed: { opacity: 0.7, transform: [{ scale: 0.98 }] },
+  otpSectionContainer: { overflow: 'hidden' },
 });
