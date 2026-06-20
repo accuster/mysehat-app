@@ -1,6 +1,5 @@
-// components/screens/partner/PartnerTransactionsScreen.tsx
-// ✅ Partner Transaction History with Filtering & Search + Infinite Scroll
-/* eslint-disable react-native/no-inline-styles */
+// components/screens/partner/PartnerReportsScreen.tsx
+// ✅ Partner Reports with Filtering, Search & Infinite Scroll
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
@@ -22,8 +21,8 @@ import {
 } from 'react-native-safe-area-context';
 import { useAppDispatch, useAppSelector } from '../../../store/hook';
 import { 
-  fetchPartnerTransactions,
-  loadMorePartnerTransactions,
+  fetchPartnerReports,
+  loadMorePartnerReports,
 } from '../../../store/slices/partnerSlice';
 import {
   ArrowLeft,
@@ -31,12 +30,11 @@ import {
   SlidersHorizontal,
   X,
   Calendar,
-  CreditCard,
-  DollarSign,
+  FileText,
+  Scale,
+  Activity,
   MapPin,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
+  User,
 } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
@@ -50,13 +48,12 @@ type FilterOptions = {
   dateRange: 'all' | 'today' | 'week' | 'month' | 'year' | 'custom';
   startDate: Date | null;
   endDate: Date | null;
-  paymentMethod: 'all' | 'UPI' | 'Card' | 'NetBanking' | 'Wallet';
-  orderStatus: 'all' | 'completed' | 'processing' | 'failed';
-  amountMin: string;
-  amountMax: string;
+  bmiType: 'all' | 'Underweight' | 'Normal' | 'Overweight' | 'Obese';
+  healthScoreMin: string;
+  healthScoreMax: string;
 };
 
-export default function PartnerTransactionsScreen({ navigation }: Props) {
+export default function PartnerReportsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const dispatch = useAppDispatch();
   const isMounted = useRef(true);
@@ -65,15 +62,15 @@ export default function PartnerTransactionsScreen({ navigation }: Props) {
 
   // Redux state
   const { 
-    transactions, 
-    transactionsLoading, 
-    transactionsError,
-    transactionsLoadingMore,
-    transactionsAllLoaded,
-    transactionsPagination,
+    reports, 
+    reportsLoading, 
+    reportsError,
+    reportsLoadingMore,
+    reportsAllLoaded,
+    reportsPagination,
   } = useAppSelector(state => state.partner);
 
-  // ✅ Check partner auth state
+  // Check partner auth state
   const isPartnerAuthenticated = useAppSelector(
     state => state.partnerAuth.isAuthenticated,
   );
@@ -81,8 +78,7 @@ export default function PartnerTransactionsScreen({ navigation }: Props) {
   // Local state
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filteredTransactions, setFilteredTransactions] =
-    useState(transactions);
+  const [filteredReports, setFilteredReports] = useState(reports);
   const [showFilterModal, setShowFilterModal] = useState(false);
 
   // Date picker states
@@ -94,58 +90,53 @@ export default function PartnerTransactionsScreen({ navigation }: Props) {
     dateRange: 'all',
     startDate: null,
     endDate: null,
-    paymentMethod: 'all',
-    orderStatus: 'all',
-    amountMin: '',
-    amountMax: '',
+    bmiType: 'all',
+    healthScoreMin: '',
+    healthScoreMax: '',
   });
 
   const [activeFiltersCount, setActiveFiltersCount] = useState(0);
 
-  const loadTransactions = useCallback(async () => {
+  const loadReports = useCallback(async () => {
     try {
       await executeApiCall(
-        () => dispatch(fetchPartnerTransactions({})).unwrap(),
+        () => dispatch(fetchPartnerReports({})).unwrap(),
         {
           showSuccessToast: false,
           showErrorToast: true,
-          customErrorMessage: 'Failed to load transactions',
-          retryCallback: loadTransactions,
+          customErrorMessage: 'Failed to load reports',
+          retryCallback: loadReports,
         },
       );
     } catch (error: any) {
-      // If session expired, the global handler will logout - no need to show error
       if (error?.message?.toLowerCase().includes('session expired')) {
-        console.log(
-          '🔒 Session expired - global handler will redirect to Auth',
-        );
+        console.log('🔒 Session expired - global handler will redirect to Auth');
         return;
       }
-      // For other errors, they're already handled by executeApiCall
     }
   }, [dispatch, executeApiCall]);
 
   useEffect(() => {
     isMounted.current = true;
 
-    console.log('💳 PartnerTransactionsScreen: Component mounted');
+    console.log('📋 PartnerReportsScreen: Component mounted');
 
-    // ✅ Check authentication before loading
+    // Check authentication before loading
     if (!isPartnerAuthenticated) {
       console.log('🔒 Not authenticated - redirecting to Auth');
       navigation.replace('Auth');
       return;
     }
 
-    loadTransactions();
+    loadReports();
 
     return () => {
-      console.log('🧹 PartnerTransactionsScreen: Unmounting...');
+      console.log('🧹 PartnerReportsScreen: Unmounting...');
       isMounted.current = false;
     };
-  }, [loadTransactions, isPartnerAuthenticated, navigation]);
+  }, [loadReports, isPartnerAuthenticated, navigation]);
 
-  // ✅ Listen for auth state changes (e.g., session expired logout)
+  // Listen for auth state changes
   useEffect(() => {
     if (!isPartnerAuthenticated && isMounted.current) {
       console.log('🔒 Auth state changed - partner logged out, redirecting...');
@@ -156,7 +147,7 @@ export default function PartnerTransactionsScreen({ navigation }: Props) {
   // Hardware back button handling
   useEffect(() => {
     const backAction = () => {
-      console.log('⬅️ HARDWARE BACK: PartnerTransactionsScreen');
+      console.log('⬅️ HARDWARE BACK: PartnerReportsScreen');
       if (isMounted.current && navigation.canGoBack()) {
         navigation.goBack();
         return true;
@@ -173,24 +164,22 @@ export default function PartnerTransactionsScreen({ navigation }: Props) {
 
   // Apply filters and search
   useEffect(() => {
-    let filtered = [...transactions];
+    let filtered = [...reports];
 
     // Apply search filter
     if (searchQuery.trim() !== '') {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(txn => {
-        const orderId = txn.order_id?.toLowerCase() || '';
-        const mobileNumber = txn.mobile_number?.toLowerCase() || '';
-        const machineId = txn.machine_id?.toLowerCase() || '';
-        const machineLocation = txn.machine_location?.toLowerCase() || '';
-        const paymentMethod = txn.payment_method?.toLowerCase() || '';
+      filtered = filtered.filter(report => {
+        const name = report.full_name?.toLowerCase() || '';
+        const reportId = report.report_id?.toLowerCase() || '';
+        const location = report.machine_location?.toLowerCase() || '';
+        const bmiStatus = report.bmi_status?.toLowerCase() || '';
 
         return (
-          orderId.includes(query) ||
-          mobileNumber.includes(query) ||
-          machineId.includes(query) ||
-          machineLocation.includes(query) ||
-          paymentMethod.includes(query)
+          name.includes(query) ||
+          reportId.includes(query) ||
+          location.includes(query) ||
+          bmiStatus.includes(query)
         );
       });
     }
@@ -200,117 +189,107 @@ export default function PartnerTransactionsScreen({ navigation }: Props) {
       filters.dateRange === 'custom' &&
       (filters.startDate || filters.endDate)
     ) {
-      filtered = filtered.filter(txn => {
-        if (!txn.payment_completed_at) return false;
-        const txnDate = new Date(txn.payment_completed_at);
-        txnDate.setHours(0, 0, 0, 0);
+      filtered = filtered.filter(report => {
+        if (!report.report_date) return false;
+        const reportDate = new Date(report.report_date);
+        reportDate.setHours(0, 0, 0, 0);
 
         if (filters.startDate && filters.endDate) {
           const start = new Date(filters.startDate);
           start.setHours(0, 0, 0, 0);
           const end = new Date(filters.endDate);
           end.setHours(23, 59, 59, 999);
-          return txnDate >= start && txnDate <= end;
+          return reportDate >= start && reportDate <= end;
         } else if (filters.startDate) {
           const start = new Date(filters.startDate);
           start.setHours(0, 0, 0, 0);
-          return txnDate >= start;
+          return reportDate >= start;
         } else if (filters.endDate) {
           const end = new Date(filters.endDate);
           end.setHours(23, 59, 59, 999);
-          return txnDate <= end;
+          return reportDate <= end;
         }
         return true;
       });
     } else if (filters.dateRange !== 'all' && filters.dateRange !== 'custom') {
       const now = new Date();
-      filtered = filtered.filter(txn => {
-        if (!txn.payment_completed_at) return false;
-        const txnDate = new Date(txn.payment_completed_at);
+      filtered = filtered.filter(report => {
+        if (!report.report_date) return false;
+        const reportDate = new Date(report.report_date);
 
         switch (filters.dateRange) {
           case 'today':
-            return txnDate.toDateString() === now.toDateString();
+            return reportDate.toDateString() === now.toDateString();
           case 'week':
             const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            return txnDate >= weekAgo;
+            return reportDate >= weekAgo;
           case 'month':
             const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-            return txnDate >= monthAgo;
+            return reportDate >= monthAgo;
           case 'year':
             const yearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-            return txnDate >= yearAgo;
+            return reportDate >= yearAgo;
           default:
             return true;
         }
       });
     }
 
-    // Apply payment method filter
-    if (filters.paymentMethod !== 'all') {
+    // Apply BMI type filter
+    if (filters.bmiType !== 'all') {
       filtered = filtered.filter(
-        txn => txn.payment_method === filters.paymentMethod,
+        report => report.bmi_status === filters.bmiType,
       );
     }
 
-    // Apply order status filter
-    if (filters.orderStatus !== 'all') {
-      filtered = filtered.filter(
-        txn => txn.order_status === filters.orderStatus,
-      );
-    }
-
-    // Apply amount range filter
-    if (filters.amountMin !== '' || filters.amountMax !== '') {
-      filtered = filtered.filter(txn => {
-        const amount = txn.test_fee || 0;
+    // Apply health score range filter
+    if (filters.healthScoreMin !== '' || filters.healthScoreMax !== '') {
+      filtered = filtered.filter(report => {
+        const score = report.health_score || 0;
         const min =
-          filters.amountMin !== '' ? parseFloat(filters.amountMin) : 0;
+          filters.healthScoreMin !== '' ? parseFloat(filters.healthScoreMin) : 0;
         const max =
-          filters.amountMax !== '' ? parseFloat(filters.amountMax) : 999999;
-        return amount >= min && amount <= max;
+          filters.healthScoreMax !== '' ? parseFloat(filters.healthScoreMax) : 100;
+        return score >= min && score <= max;
       });
     }
 
-    setFilteredTransactions(filtered);
+    setFilteredReports(filtered);
 
     // Count active filters
     let count = 0;
     if (filters.dateRange !== 'all') count++;
-    if (filters.paymentMethod !== 'all') count++;
-    if (filters.orderStatus !== 'all') count++;
-    if (filters.amountMin !== '' || filters.amountMax !== '') count++;
+    if (filters.bmiType !== 'all') count++;
+    if (filters.healthScoreMin !== '' || filters.healthScoreMax !== '') count++;
     setActiveFiltersCount(count);
-  }, [searchQuery, transactions, filters]);
+  }, [searchQuery, reports, filters]);
 
   const onRefresh = useCallback(async () => {
-    console.log('🔄 PartnerTransactionsScreen: Refreshing transactions...');
+    console.log('🔄 PartnerReportsScreen: Refreshing reports...');
     if (!isMounted.current) return;
 
-    // ✅ Check auth before refresh
     if (!isPartnerAuthenticated) {
       console.log('🔒 Not authenticated - skipping refresh');
       return;
     }
 
     setRefreshing(true);
-    await loadTransactions();
+    await loadReports();
 
     if (isMounted.current) {
       setRefreshing(false);
     }
-  }, [loadTransactions, isPartnerAuthenticated]);
+  }, [loadReports, isPartnerAuthenticated]);
 
-  // ✅ NEW: Handle infinite scroll - load more transactions
+  // Handle infinite scroll - load more reports
   const handleLoadMore = useCallback(async () => {
-    // ✅ Don't load if already loading or all loaded
-    if (transactionsLoadingMore || transactionsAllLoaded || !isPartnerAuthenticated) {
+    if (reportsLoadingMore || reportsAllLoaded || !isPartnerAuthenticated) {
       return;
     }
     
-    // ✅ Don't load more if filtering is active (client-side filter)
+    // Don't load more if filtering is active
     const isFiltering = searchQuery || filters.dateRange !== 'all' || 
-                       filters.paymentMethod !== 'all' || filters.orderStatus !== 'all';
+                       filters.bmiType !== 'all';
     
     if (isFiltering) {
       return;
@@ -319,15 +298,14 @@ export default function PartnerTransactionsScreen({ navigation }: Props) {
     console.log('📄 Load more triggered — fetching next page...');
     
     try {
-      await dispatch(loadMorePartnerTransactions({})).unwrap();
+      await dispatch(loadMorePartnerReports({})).unwrap();
     } catch (error: any) {
       console.warn('⚠️ Load more failed:', error.message);
-      // Silent failure — user can try again
     }
   }, [
     dispatch, 
-    transactionsLoadingMore, 
-    transactionsAllLoaded, 
+    reportsLoadingMore, 
+    reportsAllLoaded, 
     isPartnerAuthenticated,
     searchQuery,
     filters,
@@ -371,10 +349,9 @@ export default function PartnerTransactionsScreen({ navigation }: Props) {
       dateRange: 'all',
       startDate: null,
       endDate: null,
-      paymentMethod: 'all',
-      orderStatus: 'all',
-      amountMin: '',
-      amountMax: '',
+      bmiType: 'all',
+      healthScoreMin: '',
+      healthScoreMax: '',
     });
   };
 
@@ -411,32 +388,39 @@ export default function PartnerTransactionsScreen({ navigation }: Props) {
     });
   };
 
-  const getOrderStatusConfig = (status: string | null) => {
+  const getBmiStatusConfig = (status: string | null) => {
     switch (status) {
-      case 'completed':
+      case 'Normal':
         return {
-          icon: CheckCircle2,
+          icon: Activity,
           color: '#10B981',
           bg: 'rgba(16, 185, 129, 0.15)',
-          label: 'Completed',
+          label: 'Normal',
         };
-      case 'processing':
+      case 'Underweight':
         return {
-          icon: Clock,
+          icon: Scale,
+          color: '#3B82F6',
+          bg: 'rgba(59, 130, 246, 0.15)',
+          label: 'Underweight',
+        };
+      case 'Overweight':
+        return {
+          icon: Scale,
           color: '#F59E0B',
           bg: 'rgba(245, 158, 11, 0.15)',
-          label: 'Processing',
+          label: 'Overweight',
         };
-      case 'failed':
+      case 'Obese':
         return {
-          icon: AlertCircle,
+          icon: Scale,
           color: '#EF4444',
           bg: 'rgba(239, 68, 68, 0.15)',
-          label: 'Failed',
+          label: 'Obese',
         };
       default:
         return {
-          icon: Clock,
+          icon: FileText,
           color: '#71717A',
           bg: 'rgba(113, 113, 122, 0.15)',
           label: 'Unknown',
@@ -451,21 +435,21 @@ export default function PartnerTransactionsScreen({ navigation }: Props) {
       <TouchableOpacity onPress={handleBack} style={styles.backButton}>
         <ArrowLeft size={24} color="#FAFAFA" />
       </TouchableOpacity>
-      <Text style={styles.headerTitle}>Transaction History</Text>
+      <Text style={styles.headerTitle}>Medical Reports</Text>
       <View style={styles.placeholder} />
     </View>
   );
 
   const renderFooter = () => {
-    // Don't show footer if filtering (client-side filter)
+    // Don't show footer if filtering
     const isFiltering = searchQuery || filters.dateRange !== 'all' || 
-                       filters.paymentMethod !== 'all' || filters.orderStatus !== 'all';
+                       filters.bmiType !== 'all';
     if (isFiltering) {
       return null;
     }
     
     // Show loading indicator if currently loading more
-    if (transactionsLoadingMore) {
+    if (reportsLoadingMore) {
       return (
         <View style={styles.loadingMoreContainer}>
           <ActivityIndicator size="small" color="#10B981" />
@@ -475,11 +459,11 @@ export default function PartnerTransactionsScreen({ navigation }: Props) {
     }
     
     // Show "Load More" button if more pages available
-    if (!transactionsAllLoaded && transactionsPagination) {
+    if (!reportsAllLoaded && reportsPagination) {
       return (
         <View style={styles.loadMoreContainer}>
           <Text style={styles.loadMoreInfo}>
-            Showing {transactions.length} of {transactionsPagination.total}
+            Showing {reports.length} of {reportsPagination.total}
           </Text>
           <TouchableOpacity 
             style={styles.loadMoreBtn}
@@ -492,11 +476,11 @@ export default function PartnerTransactionsScreen({ navigation }: Props) {
     }
     
     // Show "All loaded" message
-    if (transactions.length > 0 && transactionsAllLoaded) {
+    if (reports.length > 0 && reportsAllLoaded) {
       return (
         <View style={styles.allLoadedContainer}>
           <Text style={styles.allLoadedText}>
-             All transactions loaded
+            ✓ All {reports.length} reports loaded
           </Text>
         </View>
       );
@@ -506,36 +490,36 @@ export default function PartnerTransactionsScreen({ navigation }: Props) {
   };
 
   // Render loading state
-  if (transactionsLoading && transactions.length === 0) {
+  if (reportsLoading && reports.length === 0) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         {renderHeader()}
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#10B981" />
-          <Text style={styles.loadingText}>Loading transactions...</Text>
+          <Text style={styles.loadingText}>Loading reports...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  // Render error state (but not for session expired - that's handled by auto-logout)
-  const isSessionExpiredError = transactionsError
+  // Render error state
+  const isSessionExpiredError = reportsError
     ?.toLowerCase()
     .includes('session expired');
 
   if (
-    transactionsError &&
-    transactions.length === 0 &&
+    reportsError &&
+    reports.length === 0 &&
     !isSessionExpiredError
   ) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         {renderHeader()}
         <View style={styles.centerContainer}>
-          <Text style={styles.errorText}>{transactionsError}</Text>
+          <Text style={styles.errorText}>{reportsError}</Text>
           <TouchableOpacity
             style={styles.retryBtn}
-            onPress={() => dispatch(fetchPartnerTransactions({}))}
+            onPress={() => dispatch(fetchPartnerReports({}))}
           >
             <Text style={styles.retryText}>Retry</Text>
           </TouchableOpacity>
@@ -545,14 +529,14 @@ export default function PartnerTransactionsScreen({ navigation }: Props) {
   }
 
   // Render empty state
-  if (transactions.length === 0) {
+  if (reports.length === 0) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         {renderHeader()}
         <View style={styles.centerContainer}>
-          <Text style={styles.emptyText}>💳 No transactions found</Text>
+          <Text style={styles.emptyText}>📋 No reports found</Text>
           <Text style={styles.emptySubtext}>
-            Transaction history from your machines will appear here
+            Reports from your machines will appear here
           </Text>
         </View>
       </SafeAreaView>
@@ -569,7 +553,7 @@ export default function PartnerTransactionsScreen({ navigation }: Props) {
           <Search size={20} color="#71717A" strokeWidth={2.5} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search by ID, phone, location..."
+            placeholder="Search by name, ID, location..."
             placeholderTextColor="#71717A"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -593,17 +577,17 @@ export default function PartnerTransactionsScreen({ navigation }: Props) {
 
       {/* Content */}
       <View style={styles.content}>
-        {filteredTransactions.length === 0 ? (
+        {filteredReports.length === 0 ? (
           <View style={styles.noResultsContainer}>
-            <Text style={styles.noResultsText}>No transactions found</Text>
+            <Text style={styles.noResultsText}>No reports found</Text>
             <Text style={styles.noResultsSubtext}>
               Try adjusting your search or filters
             </Text>
           </View>
         ) : (
           <FlatList
-            data={filteredTransactions}
-            keyExtractor={item => item.order_id}
+            data={filteredReports}
+            keyExtractor={item => item.report_id}
             contentContainerStyle={{ paddingBottom: contentBottomPadding }}
             refreshControl={
               <RefreshControl
@@ -617,46 +601,40 @@ export default function PartnerTransactionsScreen({ navigation }: Props) {
             onEndReachedThreshold={0.5}
             ListFooterComponent={renderFooter}
             renderItem={({ item }) => {
-              // ✅ Safety check - skip if item is invalid
-              if (!item || !item.order_id) {
-                console.warn('⚠️ Invalid transaction item:', item);
+              // Safety check
+              if (!item || !item.report_id) {
+                console.warn('⚠️ Invalid report item:', item);
                 return null;
               }
-              const statusConfig = getOrderStatusConfig(item.order_status);
-              const StatusIcon = statusConfig.icon;
-
-              const testFee =
-                typeof item.test_fee === 'number'
-                  ? item.test_fee
-                  : (typeof item.test_fee === 'string'
-                      ? parseFloat(item.test_fee)
-                      : 0) || 0;
+              
+              const bmiConfig = getBmiStatusConfig(item.bmi_status);
+              const BmiIcon = bmiConfig.icon;
 
               return (
                 <TouchableOpacity
                   style={styles.card}
                   activeOpacity={0.7}
                   onPress={() => {
-                    // TODO: Navigate to transaction detail screen
-                    console.log('📄 Transaction clicked:', item.order_id);
+                    // TODO: Navigate to report detail screen
+                    console.log('📄 Report clicked:', item.report_id);
                   }}
                 >
-                  {/* Status Icon */}
+                  {/* BMI Status Icon */}
                   <View
                     style={[
                       styles.iconContainer,
-                      { backgroundColor: statusConfig.bg },
+                      { backgroundColor: bmiConfig.bg },
                     ]}
                   >
-                    <StatusIcon
+                    <BmiIcon
                       size={22}
-                      color={statusConfig.color}
+                      color={bmiConfig.color}
                       strokeWidth={2.5}
                     />
                   </View>
 
-                  {/* Transaction Details */}
-                  <View style={styles.txnDetails}>
+                  {/* Report Details */}
+                  <View style={styles.reportDetails}>
                     {/* Machine Location Badge */}
                     {item.machine_location && (
                       <View style={styles.locationBadge}>
@@ -667,44 +645,56 @@ export default function PartnerTransactionsScreen({ navigation }: Props) {
                       </View>
                     )}
 
-                    {/* Customer Mobile */}
-                    <Text style={styles.txnTitle}>
-                      {item.mobile_number || 'Unknown Customer'}
+                    {/* Patient Name & Demographics */}
+                    <View style={styles.nameRow}>
+                      <User size={14} color="#10B981" strokeWidth={2.5} />
+                      <Text style={styles.reportName}>
+                        {item.full_name || 'Unknown'}, {item.gender || 'U'}/{item.age || '?'}
+                      </Text>
+                    </View>
+
+                    {/* Vitals */}
+                    <Text style={styles.reportVitals}>
+                      H: {item.height || 'N/A'}cm • W: {item.weight || 'N/A'}kg • BMI: {item.bmi ? item.bmi.toFixed(1) : 'N/A'}
                     </Text>
+
+                    {/* Health Score */}
+                    {item.health_score !== null && (
+                      <View style={styles.healthScoreRow}>
+                        <Activity size={12} color="#F59E0B" strokeWidth={2.5} />
+                        <Text style={styles.healthScoreText}>
+                          Health Score: {item.health_score}%
+                        </Text>
+                      </View>
+                    )}
 
                     {/* Date & Time */}
-                    <Text style={styles.txnDate}>
-                      {formatDate(item.payment_completed_at)} •{' '}
-                      {formatTime(item.payment_completed_at)}
+                    <Text style={styles.reportDate}>
+                      {formatDate(item.report_date)} • {formatTime(item.report_date)}
                     </Text>
 
-                    {/* Order ID & Payment Method */}
-                    <Text style={styles.txnId}>
-                      {item.payment_method || 'N/A'} • Order: {item.order_id}
+                    {/* Report ID */}
+                    <Text style={styles.reportId}>
+                      Report ID: {item.report_id}
                     </Text>
 
-                    {/* Status Badge */}
+                    {/* BMI Status Badge */}
                     <View
                       style={[
                         styles.statusBadge,
-                        { backgroundColor: statusConfig.bg },
+                        { backgroundColor: bmiConfig.bg },
                       ]}
                     >
                       <Text
                         style={[
                           styles.statusText,
-                          { color: statusConfig.color },
+                          { color: bmiConfig.color },
                         ]}
                       >
-                        {statusConfig.label}
+                        {bmiConfig.label}
                       </Text>
                     </View>
                   </View>
-
-                  {/* Amount */}
-                  <Text style={[styles.txnAmount, { color: '#10B981' }]}>
-                    +₹{testFee.toFixed(0)}
-                  </Text>
                 </TouchableOpacity>
               );
             }}
@@ -722,7 +712,7 @@ export default function PartnerTransactionsScreen({ navigation }: Props) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filter Transactions</Text>
+              <Text style={styles.modalTitle}>Filter Reports</Text>
               <TouchableOpacity onPress={() => setShowFilterModal(false)}>
                 <X size={24} color="#A1A1AA" />
               </TouchableOpacity>
@@ -798,38 +788,38 @@ export default function PartnerTransactionsScreen({ navigation }: Props) {
                 )}
               </View>
 
-              {/* Payment Method Filter */}
+              {/* BMI Category Filter */}
               <View style={styles.filterSection}>
                 <View style={styles.filterLabelRow}>
-                  <CreditCard size={18} color="#10B981" strokeWidth={2.5} />
-                  <Text style={styles.filterLabel}>Payment Method</Text>
+                  <Scale size={18} color="#10B981" strokeWidth={2.5} />
+                  <Text style={styles.filterLabel}>BMI Category</Text>
                 </View>
                 <View style={styles.filterOptions}>
                   {[
-                    { label: 'All Methods', value: 'all' },
-                    { label: 'UPI', value: 'UPI' },
-                    { label: 'Card', value: 'Card' },
-                    { label: 'Net Banking', value: 'NetBanking' },
-                    { label: 'Wallet', value: 'Wallet' },
+                    { label: 'All Categories', value: 'all' },
+                    { label: 'Underweight', value: 'Underweight' },
+                    { label: 'Normal', value: 'Normal' },
+                    { label: 'Overweight', value: 'Overweight' },
+                    { label: 'Obese', value: 'Obese' },
                   ].map(option => (
                     <TouchableOpacity
                       key={option.value}
                       style={[
                         styles.filterOption,
-                        filters.paymentMethod === option.value &&
+                        filters.bmiType === option.value &&
                           styles.filterOptionActive,
                       ]}
                       onPress={() =>
                         setFilters({
                           ...filters,
-                          paymentMethod: option.value as any,
+                          bmiType: option.value as any,
                         })
                       }
                     >
                       <Text
                         style={[
                           styles.filterOptionText,
-                          filters.paymentMethod === option.value &&
+                          filters.bmiType === option.value &&
                             styles.filterOptionTextActive,
                         ]}
                       >
@@ -840,77 +830,36 @@ export default function PartnerTransactionsScreen({ navigation }: Props) {
                 </View>
               </View>
 
-              {/* Order Status Filter */}
+              {/* Health Score Range */}
               <View style={styles.filterSection}>
                 <View style={styles.filterLabelRow}>
-                  <CheckCircle2 size={18} color="#10B981" strokeWidth={2.5} />
-                  <Text style={styles.filterLabel}>Order Status</Text>
-                </View>
-                <View style={styles.filterOptions}>
-                  {[
-                    { label: 'All Status', value: 'all' },
-                    { label: 'Completed', value: 'completed' },
-                    { label: 'Processing', value: 'processing' },
-                    { label: 'Failed', value: 'failed' },
-                  ].map(option => (
-                    <TouchableOpacity
-                      key={option.value}
-                      style={[
-                        styles.filterOption,
-                        filters.orderStatus === option.value &&
-                          styles.filterOptionActive,
-                      ]}
-                      onPress={() =>
-                        setFilters({
-                          ...filters,
-                          orderStatus: option.value as any,
-                        })
-                      }
-                    >
-                      <Text
-                        style={[
-                          styles.filterOptionText,
-                          filters.orderStatus === option.value &&
-                            styles.filterOptionTextActive,
-                        ]}
-                      >
-                        {option.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              {/* Amount Range */}
-              <View style={styles.filterSection}>
-                <View style={styles.filterLabelRow}>
-                  <DollarSign size={18} color="#10B981" strokeWidth={2.5} />
-                  <Text style={styles.filterLabel}>Amount Range</Text>
+                  <Activity size={18} color="#10B981" strokeWidth={2.5} />
+                  <Text style={styles.filterLabel}>Health Score Range (%)</Text>
                 </View>
                 <View style={styles.rangeInputs}>
                   <View style={styles.rangeInputContainer}>
-                    <Text style={styles.rangeInputLabel}>Min Amount (₹)</Text>
+                    <Text style={styles.rangeInputLabel}>Min Score</Text>
                     <TextInput
                       style={styles.rangeInput}
-                      placeholder="e.g., 100"
+                      placeholder="e.g., 50"
                       placeholderTextColor="#71717A"
-                      value={filters.amountMin}
+                      value={filters.healthScoreMin}
                       onChangeText={text =>
-                        setFilters({ ...filters, amountMin: text })
+                        setFilters({ ...filters, healthScoreMin: text })
                       }
                       keyboardType="decimal-pad"
                     />
                   </View>
                   <Text style={styles.rangeSeparator}>—</Text>
                   <View style={styles.rangeInputContainer}>
-                    <Text style={styles.rangeInputLabel}>Max Amount (₹)</Text>
+                    <Text style={styles.rangeInputLabel}>Max Score</Text>
                     <TextInput
                       style={styles.rangeInput}
-                      placeholder="e.g., 1000"
+                      placeholder="e.g., 100"
                       placeholderTextColor="#71717A"
-                      value={filters.amountMax}
+                      value={filters.healthScoreMax}
                       onChangeText={text =>
-                        setFilters({ ...filters, amountMax: text })
+                        setFilters({ ...filters, healthScoreMax: text })
                       }
                       keyboardType="decimal-pad"
                     />
@@ -1125,7 +1074,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     borderWidth: 1,
     borderColor: '#27272A',
   },
@@ -1135,8 +1084,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 4,
   },
-  txnDetails: {
+  reportDetails: {
     flex: 1,
     marginLeft: 14,
   },
@@ -1156,20 +1106,42 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
-  txnTitle: {
-    color: '#FAFAFA',
-    fontSize: 16,
-    fontWeight: '700',
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     marginBottom: 4,
   },
-  txnDate: {
+  reportName: {
+    color: '#FAFAFA',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  reportVitals: {
     color: '#A1A1AA',
     fontSize: 13,
     marginTop: 2,
     fontWeight: '500',
   },
-  txnId: {
+  healthScoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  healthScoreText: {
+    color: '#F59E0B',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  reportDate: {
     color: '#71717A',
+    fontSize: 12,
+    marginTop: 6,
+    fontWeight: '500',
+  },
+  reportId: {
+    color: '#52525B',
     fontSize: 11,
     marginTop: 4,
     fontWeight: '500',
@@ -1187,13 +1159,8 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  txnAmount: {
-    fontSize: 20,
-    fontWeight: '900',
-    letterSpacing: -0.5,
-  },
 
-  // ✅ NEW: Load more / pagination styles
+  // Load more / pagination styles
   loadingMoreContainer: {
     paddingVertical: 20,
     alignItems: 'center',

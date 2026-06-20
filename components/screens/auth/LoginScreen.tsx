@@ -1,6 +1,8 @@
 /* eslint-disable react-native/no-inline-styles */
 // components/screens/auth/LoginScreen.tsx
 // ✅ COMPLETE VERSION: Network Detection + OTP Session Reset + ErrorToast
+// ✅ UPDATED: InAppBrowser for Terms/Privacy + CircleChevronRight for Partner Login
+// ✅ UPDATED: ?embed=true URLs to hide website header/footer in WebView
 
 import React, {
   useMemo,
@@ -22,15 +24,15 @@ import {
   Modal,
   Image,
   BackHandler,
-  Linking,
   Animated,
   AppState,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { OTPWidget } from '@msg91comm/sendotp-react-native';
-import { Edit2 } from 'lucide-react-native';
+import { Edit2, CircleChevronRight } from 'lucide-react-native';
 import Loader from '../../common/Loader';
 import ErrorToast from '../../common/ErrorToast';
+import InAppBrowser from '../../common/InAppBrowser';
 import { useErrorToast } from '../../../hooks/useErrorToast';
 import { checkNetworkConnectivity } from '../../../hooks/useNetworkStatus';
 import { isValidIndianMobile } from '../../../utils/validators';
@@ -72,6 +74,7 @@ export default function LoginScreen({ navigation }: Props) {
   const [reqId, setReqId] = useState<string | null>(null);
   const [isTestMode, setIsTestMode] = useState(false);
   const [isEditingPhone, setIsEditingPhone] = useState(false);
+  const [browser, setBrowser] = useState({ visible: false, url: '', title: '' });
 
   const { toast, showError, showSuccess, showInfo, hideToast } =
     useErrorToast();
@@ -119,24 +122,9 @@ export default function LoginScreen({ navigation }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleOpenURL = useCallback(
-    async (url: string, title: string) => {
-      try {
-        const supported = await Linking.canOpenURL(url);
-        if (supported) {
-          await Linking.openURL(url);
-        } else {
-          showError(
-            `Cannot open ${title}. Please check your internet connection.`,
-          );
-        }
-      } catch (err) {
-        console.log('Error opening URL:', err);
-        showError(`Failed to open ${title}. Please try again later.`);
-      }
-    },
-    [showError],
-  );
+  const handleOpenURL = useCallback((url: string, title: string) => {
+    setBrowser({ visible: true, url, title });
+  }, []);
 
   const slideInOtpSection = useCallback(() => {
     Animated.parallel([
@@ -481,6 +469,14 @@ export default function LoginScreen({ navigation }: Props) {
         action={toast.action}
       />
 
+      {/* ✅ InAppBrowser for Terms & Privacy Policy */}
+      <InAppBrowser
+        visible={browser.visible}
+        url={browser.url}
+        title={browser.title}
+        onClose={() => setBrowser({ visible: false, url: '', title: '' })}
+      />
+
       <Modal transparent visible={isLoading} animationType="fade">
         <View style={styles.loaderOverlay}>
           <View style={styles.loaderCard}>
@@ -647,15 +643,16 @@ export default function LoginScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.footer}>
-          {/* ✅ NEW: Partner Login Link */}
+          {/* ✅ Partner Login Link with CircleChevronRight icon */}
           <Pressable
             onPress={() => navigation.navigate('PartnerLogin')}
             style={styles.partnerLoginBtn}
           >
             <Text style={styles.partnerLoginText}>
               Are you a Partner?{' '}
-              <Text style={styles.partnerLoginLink}>Login as Partner →</Text>
+              <Text style={styles.partnerLoginLink}>Login as Partner</Text>
             </Text>
+            <CircleChevronRight size={18} color="#7C3AED" style={styles.partnerLoginIcon} />
           </Pressable>
 
           <Text style={styles.footerText}>
@@ -663,7 +660,7 @@ export default function LoginScreen({ navigation }: Props) {
             <Text
               style={styles.footerLink}
               onPress={() =>
-                handleOpenURL('https://mysehat.ai/terms', 'Terms of Service')
+                handleOpenURL('https://mysehat.ai/terms?embed=true', 'Terms of Service')
               }
             >
               Terms of Service
@@ -672,7 +669,7 @@ export default function LoginScreen({ navigation }: Props) {
             <Text
               style={styles.footerLink}
               onPress={() =>
-                handleOpenURL('https://mysehat.ai/privacy', 'Privacy Policy')
+                handleOpenURL('https://mysehat.ai/privacy?embed=true', 'Privacy Policy')
               }
             >
               Privacy Policy
@@ -749,10 +746,15 @@ const styles = StyleSheet.create({
   resendText: { color: '#F97316', fontWeight: '600', fontSize: 13 },
   resendTextDisabled: { color: '#6B7280' },
   footer: { marginTop: 24, paddingTop: 20, alignItems: 'center', gap: 12 },
-  // ✅ NEW Partner Login styles
-  partnerLoginBtn: { paddingVertical: 6 },
+  partnerLoginBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    gap: 6,
+  },
   partnerLoginText: { color: '#6B7280', fontSize: 13 },
   partnerLoginLink: { color: '#7C3AED', fontWeight: '700' },
+  partnerLoginIcon: { marginTop: 1 },
   footerText: {
     textAlign: 'center',
     color: '#6B7280',

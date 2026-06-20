@@ -1,15 +1,11 @@
 // components/common/drawer/DrawerHeader.tsx
 import React, { useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-} from 'react-native';
-import { X, Phone } from 'lucide-react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { X, Phone, Mail } from 'lucide-react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../../store';
 import { fetchMembers } from '../../../store/slices/memberSlice';
+import { useAppSelector } from '../../../store/hook';
 
 type Props = {
   onClose: () => void;
@@ -17,47 +13,69 @@ type Props = {
 
 export default function DrawerHeader({ onClose }: Props) {
   const dispatch = useDispatch<AppDispatch>();
+
+  // ── Role detection ────────────────────────────────────────────────────────
+  const isPartner = useAppSelector(s => s.partnerAuth.isAuthenticated);
+  const partnerInfo = useAppSelector(s => s.partnerAuth.partner);
+
+  // ── User data ─────────────────────────────────────────────────────────────
   const { members } = useSelector((state: RootState) => state.members);
   const { user } = useSelector((state: RootState) => state.auth);
 
-  // Fetch members if not loaded
+  // Fetch members only for user role
   useEffect(() => {
-    if (members.length === 0) {
+    if (!isPartner && members.length === 0) {
       dispatch(fetchMembers());
     }
-  }, [dispatch, members.length]);
+  }, [dispatch, isPartner, members.length]);
 
-  // Get SuperUser from members
-  const superUser = members.find(member => member.userType === 'SuperUser');
-
-  // Extract first name only (text before first space)
+  // ── Display values — branch by role ──────────────────────────────────────
   const getFirstName = (fullName: string) => {
-    const trimmedName = fullName.trim();
-    const spaceIndex = trimmedName.indexOf(' ');
-    return spaceIndex > 0 ? trimmedName.substring(0, spaceIndex) : trimmedName;
+    const trimmed = fullName.trim();
+    const spaceIdx = trimmed.indexOf(' ');
+    return spaceIdx > 0 ? trimmed.substring(0, spaceIdx) : trimmed;
   };
 
-  // Use SuperUser name if available, otherwise fall back to auth user
-  const displayName = superUser
-    ? getFirstName(superUser.name)
-    : user?.name
-    ? getFirstName(user.name)
-    : 'User';
+  let displayName: string;
+  let subValue: string;
+  let SubIcon: typeof Phone | typeof Mail;
 
-  // Get mobile number from user
-  const userMobile = user?.mobile || 'N/A';
+  if (isPartner && partnerInfo) {
+    // Partner: show username + email
+    displayName = getFirstName(partnerInfo.username ?? 'Partner');
+    subValue = partnerInfo.email ?? '';
+    SubIcon = Mail;
+  } else {
+    // User: show SuperUser name + mobile
+    const superUser = members.find(m => m.userType === 'SuperUser');
+    displayName = superUser
+      ? getFirstName(superUser.name)
+      : user?.name
+      ? getFirstName(user.name)
+      : 'User';
+    subValue = user?.mobile ?? 'N/A';
+    SubIcon = Phone;
+  }
 
   return (
     <View style={styles.container}>
-      <View>
-        <Text style={styles.name}>Hi, {displayName}</Text>
-        <View style={styles.mobileRow}>
-          <Phone size={12} color="#7C3AED" strokeWidth={2.5} />
-          <Text style={styles.mobileValue}>{userMobile}</Text>
+      <View style={styles.info}>
+        <Text style={styles.name}>Hi, {displayName}!</Text>
+        <View style={styles.subRow}>
+          <SubIcon size={12} color="#7C3AED" strokeWidth={2.5} />
+          <Text style={styles.subValue} numberOfLines={1}>
+            {subValue}
+          </Text>
         </View>
+        {/* Partner badge */}
+        {isPartner && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>PARTNER</Text>
+          </View>
+        )}
       </View>
 
-      <Pressable onPress={onClose}>
+      <Pressable onPress={onClose} hitSlop={8}>
         <X size={24} color="#94A3B8" />
       </Pressable>
     </View>
@@ -75,20 +93,41 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#1E293B',
   },
+  info: {
+    flex: 1,
+    marginRight: 12,
+  },
   name: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
   },
-  mobileRow: {
+  subRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 4,
     gap: 6,
   },
-  mobileValue: {
+  subValue: {
     color: '#7C3AED',
     fontSize: 12,
     fontWeight: '700',
+    flexShrink: 1, // prevent long email from overflowing
+  },
+  badge: {
+    alignSelf: 'flex-start',
+    marginTop: 6,
+    backgroundColor: 'rgba(124,58,237,0.15)',
+    borderColor: '#7C3AED',
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  badgeText: {
+    color: '#A78BFA',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1.2,
   },
 });

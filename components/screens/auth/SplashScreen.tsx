@@ -92,14 +92,14 @@ export default function SplashScreen({ navigation }: Props) {
             await partnerAuthApi.validateToken(resolvedPartnerToken);
 
             if (!isMounted.current) return;
-            console.log('✅ Partner token valid → PartnerDashboard');
+            console.log('✅ Partner token valid → PartnerHome');
 
             navigation.reset({
               index: 0,
               routes: [
                 {
                   name: 'App',
-                  state: { routes: [{ name: 'PartnerDashboard' }] },
+                  state: { routes: [{ name: 'PartnerHome' }] },
                 },
               ],
             });
@@ -115,7 +115,7 @@ export default function SplashScreen({ navigation }: Props) {
                 routes: [
                   {
                     name: 'App',
-                    state: { routes: [{ name: 'PartnerDashboard' }] },
+                    state: { routes: [{ name: 'PartnerHome' }] },
                   },
                 ],
               });

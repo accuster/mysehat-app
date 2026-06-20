@@ -1,4 +1,4 @@
-// utils/notificationService.ts - FIXED VERSION
+// utils/notificationService.ts
 import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
 import { Platform, Alert } from 'react-native';
 import RNFS from 'react-native-fs';

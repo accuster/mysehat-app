@@ -1,5 +1,8 @@
 // components/screens/user/WalletScreen.tsx
-/* eslint-disable @typescript-eslint/no-unused-vars */
+// ✅ PRODUCTION GRADE: Auto-loads transactions on mount
+// ✅ Stale data check (30s cache) to avoid redundant fetches
+// ✅ Pull-to-refresh for manual updates
+// ✅ Removed lazy scroll loading — transactions load immediately
 /* eslint-disable react-native/no-inline-styles */
 import React, {
   useMemo,
@@ -20,8 +23,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
 } from 'react-native';
 import {
   SafeAreaView,
@@ -66,8 +67,8 @@ const MIN_AMOUNT = 100;
 const MAX_AMOUNT = 10000;
 const POPULAR_AMOUNT = 500;
 
-// How close to bottom (px) before lazy-loading transactions
-const LAZY_LOAD_THRESHOLD = 200;
+// ✅ Stale data threshold — skip re-fetch if data was loaded within this window
+const STALE_THRESHOLD_MS = 30_000; // 30 seconds
 
 function getReward(cash: number): number {
   return REWARD_TIERS[cash] !== undefined
@@ -183,20 +184,13 @@ function AmountBreakdown({ cash, reward }: { cash: number; reward: number }) {
 // ─── Transaction Row ──────────────────────────────────────────────────────────
 function TransactionRow({ txn }: { txn: WalletTransaction }) {
   const isCredit = txn.type === 'credit_purchase';
-  const isReward =
-    txn.razorpay_payment_id === 'REWARD_DEMOGRAPHICS' ||
-    txn.description?.includes('Reward');
 
-  // Determine label
   const label =
     txn.description || (isCredit ? 'Wallet Recharge' : 'BMI Payment');
-
-  // Trim long descriptions
   const displayLabel = label.length > 40 ? label.substring(0, 38) + '…' : label;
 
   return (
     <View style={styles.txnRow}>
-      {/* Icon */}
       <View
         style={[
           styles.txnIconWrap,
@@ -210,7 +204,6 @@ function TransactionRow({ txn }: { txn: WalletTransaction }) {
         )}
       </View>
 
-      {/* Description + Date */}
       <View style={styles.txnInfo}>
         <Text style={styles.txnLabel} numberOfLines={1}>
           {displayLabel}
@@ -218,7 +211,6 @@ function TransactionRow({ txn }: { txn: WalletTransaction }) {
         <Text style={styles.txnDate}>{formatDate(txn.created_at)}</Text>
       </View>
 
-      {/* Amount */}
       <View style={styles.txnAmountWrap}>
         <Text
           style={[
@@ -255,6 +247,7 @@ export default function WalletScreen({ navigation }: Props) {
     isRecharging,
     transactions,
     isLoadingTxns,
+    lastFetch,
   } = useAppSelector(s => s.wallet);
 
   // ── Local state ─────────────────────────────────────────────────────────────
@@ -262,9 +255,6 @@ export default function WalletScreen({ navigation }: Props) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  // ✅ Lazy load gate — true once transactions have been fetched at least once
-  const [txnsLoaded, setTxnsLoaded] = useState(false);
 
   // ── Derived values ───────────────────────────────────────────────────────────
   const parsedAmount = useMemo(() => {
@@ -290,6 +280,12 @@ export default function WalletScreen({ navigation }: Props) {
   const rewardBalance = balance?.rewards_points ?? 0;
   const totalBalance = balance?.wallet_balance ?? 0;
 
+  // ✅ Check if transaction data is stale
+  const isDataStale = useMemo(() => {
+    if (!lastFetch) return true;
+    return Date.now() - lastFetch > STALE_THRESHOLD_MS;
+  }, [lastFetch]);
+
   // ── Footer height ─────────────────────────────────────────────────────────────
   const footerHeight = useMemo(() => {
     const safeBottom = insets.bottom > 0 ? insets.bottom : 0;
@@ -298,67 +294,49 @@ export default function WalletScreen({ navigation }: Props) {
 
   const contentBottomPadding = useMemo(() => footerHeight + 20, [footerHeight]);
 
-  // ── Lifecycle ─────────────────────────────────────────────────────────────────
+  // ── Lifecycle — load balance + transactions on mount ──────────────────────────
   useEffect(() => {
     isMounted.current = true;
-    loadBalance();
+    loadInitialData();
     return () => {
       isMounted.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadBalance = useCallback(async () => {
-    await executeApiCall(() => dispatch(fetchWalletBalance()).unwrap(), {
+  // ✅ Load both balance and transactions on mount
+  const loadInitialData = useCallback(async () => {
+    // Always fetch balance
+    executeApiCall(() => dispatch(fetchWalletBalance()).unwrap(), {
       showErrorToast: true,
-      retryCallback: loadBalance,
     });
-  }, [dispatch, executeApiCall]);
 
-  // ✅ Lazy load transactions — called once when user scrolls near bottom
-  const loadTransactions = useCallback(async () => {
-    if (txnsLoaded || isLoadingTxns) return; // already loaded or loading
-    console.log('📋 Lazy loading wallet transactions...');
-    await executeApiCall(
-      () =>
-        dispatch(fetchWalletTransactions({ limit: 100, offset: 0 })).unwrap(),
-      { showErrorToast: true },
-    );
-    if (isMounted.current) setTxnsLoaded(true);
-  }, [txnsLoaded, isLoadingTxns, dispatch, executeApiCall]);
+    // Fetch transactions — skip if recently loaded (within STALE_THRESHOLD_MS)
+    if (isDataStale) {
+      console.log('📋 Loading wallet transactions on mount...');
+      executeApiCall(
+        () =>
+          dispatch(fetchWalletTransactions({ limit: 100, offset: 0 })).unwrap(),
+        { showErrorToast: true },
+      );
+    } else {
+      console.log('📋 Transactions still fresh — skipping fetch');
+    }
+  }, [dispatch, executeApiCall, isDataStale]);
 
-  // ✅ Pull-to-refresh — refreshes BOTH balance and transactions (if already loaded)
+  // ✅ Pull-to-refresh — force refreshes BOTH balance and transactions
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    const tasks: Promise<any>[] = [
+    await Promise.all([
       dispatch(fetchWalletBalance())
         .unwrap()
         .catch(() => {}),
-    ];
-    if (txnsLoaded) {
-      tasks.push(
-        dispatch(fetchWalletTransactions({ limit: 100, offset: 0 }))
-          .unwrap()
-          .catch(() => {}),
-      );
-    }
-    await Promise.all(tasks);
+      dispatch(fetchWalletTransactions({ limit: 100, offset: 0 }))
+        .unwrap()
+        .catch(() => {}),
+    ]);
     if (isMounted.current) setIsRefreshing(false);
-  }, [dispatch, txnsLoaded]);
-
-  // ✅ Scroll handler — triggers lazy load when near bottom
-  const handleScroll = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      if (txnsLoaded || isLoadingTxns) return;
-      const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-      const distanceFromBottom =
-        contentSize.height - layoutMeasurement.height - contentOffset.y;
-      if (distanceFromBottom < LAZY_LOAD_THRESHOLD) {
-        loadTransactions();
-      }
-    },
-    [txnsLoaded, isLoadingTxns, loadTransactions],
-  );
+  }, [dispatch]);
 
   // ── Hardware back ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -460,10 +438,8 @@ export default function WalletScreen({ navigation }: Props) {
 
         if (isMounted.current) setAmount('');
 
-        // ✅ Refresh transactions after successful recharge (if already loaded)
-        if (txnsLoaded) {
-          dispatch(fetchWalletTransactions({ limit: 100, offset: 0 }));
-        }
+        // ✅ Refresh transactions after successful recharge
+        dispatch(fetchWalletTransactions({ limit: 100, offset: 0 }));
 
         Alert.alert(
           '✅ Recharge Successful!',
@@ -486,7 +462,7 @@ export default function WalletScreen({ navigation }: Props) {
         if (isMounted.current) setIsProcessing(false);
       }
     },
-    [dispatch, txnsLoaded],
+    [dispatch],
   );
 
   const isAddDisabled =
@@ -523,15 +499,15 @@ export default function WalletScreen({ navigation }: Props) {
       <Text style={styles.sectionSubTitle}>Your recent wallet activity</Text>
 
       {/* Loading state */}
-      {isLoadingTxns && (
+      {isLoadingTxns && transactions.length === 0 && (
         <View style={styles.txnLoadingWrap}>
           <ActivityIndicator size="small" color="#7C3AED" />
           <Text style={styles.txnLoadingText}>Loading transactions...</Text>
         </View>
       )}
 
-      {/* Transactions list */}
-      {!isLoadingTxns && txnsLoaded && transactions.length === 0 && (
+      {/* Empty state — only show after loading completes */}
+      {!isLoadingTxns && transactions.length === 0 && (
         <View style={styles.txnEmptyWrap}>
           <Clock size={32} color="#3F3F46" />
           <Text style={styles.txnEmptyText}>No transactions yet</Text>
@@ -541,7 +517,8 @@ export default function WalletScreen({ navigation }: Props) {
         </View>
       )}
 
-      {!isLoadingTxns && transactions.length > 0 && (
+      {/* Transactions list */}
+      {transactions.length > 0 && (
         <View style={styles.txnList}>
           {transactions.map((txn, idx) => (
             <View key={txn.transaction_id}>
@@ -551,15 +528,6 @@ export default function WalletScreen({ navigation }: Props) {
               )}
             </View>
           ))}
-        </View>
-      )}
-
-      {/* Scroll hint — shown before lazy load triggers */}
-      {!txnsLoaded && !isLoadingTxns && (
-        <View style={styles.txnScrollHint}>
-          <Text style={styles.txnScrollHintText}>
-            ↓ Scroll down to load history
-          </Text>
         </View>
       )}
     </View>
@@ -582,8 +550,7 @@ export default function WalletScreen({ navigation }: Props) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: contentBottomPadding }}
         style={styles.scrollContent}
-        onScroll={handleScroll}
-        scrollEventThrottle={200} // ← check scroll every 200ms (efficient)
+        scrollEventThrottle={200}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -717,7 +684,7 @@ export default function WalletScreen({ navigation }: Props) {
           </View>
         </View>
 
-        {/* ── Transaction History (lazy loaded) ─────────────────────────────── */}
+        {/* ── Transaction History (auto-loaded on mount) ────────────────────── */}
         {renderTransactions()}
       </ScrollView>
 
@@ -1077,9 +1044,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   txnEmptySubtext: { color: 'rgba(255,255,255,0.3)', fontSize: 12 },
-
-  txnScrollHint: { alignItems: 'center', paddingVertical: 16 },
-  txnScrollHintText: { color: 'rgba(255,255,255,0.25)', fontSize: 12 },
 
   // ── Footer ──────────────────────────────────────────────────────────────────
   stickyFooter: {

@@ -14,14 +14,15 @@ export interface ReportFilters {
   page?: number;
   limit?: number;
   from?: string; // YYYY-MM-DD
-  to?: string;   // YYYY-MM-DD
+  to?: string; // YYYY-MM-DD
 }
 
 export interface TransactionFilters {
   page?: number;
   limit?: number;
-  from?: string; // YYYY-MM-DD
-  to?: string;   // YYYY-MM-DD
+  startDate?: string; // YYYY-MM-DD
+  endDate?: string; // YYYY-MM-DD
+  machineId?: string;
 }
 
 // ─── Profile ──────────────────────────────────────────────────────────────────
@@ -148,7 +149,6 @@ interface TransactionByIdResponse {
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 class PartnerApiService {
-
   /**
    * GET /api/v1/partner/profile/:id
    */
@@ -179,19 +179,27 @@ class PartnerApiService {
 
   /**
    * GET /api/v1/partner/reports
+   * ✅ UPDATED: Added default limit of 30 for pagination
    * Supports: page, limit, from (YYYY-MM-DD), to (YYYY-MM-DD)
    */
   async getReports(filters: ReportFilters = {}): Promise<ReportsResponse> {
     console.log('📋 PartnerAPI: getReports →', filters);
     const params = new URLSearchParams();
-    if (filters.page)  params.append('page',  String(filters.page));
-    if (filters.limit) params.append('limit', String(filters.limit));
-    if (filters.from)  params.append('from',  filters.from);
-    if (filters.to)    params.append('to',    filters.to);
+    
+    // ✅ Default to page 1, limit 30 (sweet spot for mobile)
+    params.append('page', filters.page?.toString() || '1');
+    params.append('limit', filters.limit?.toString() || '30');
+    
+    if (filters.from) params.append('from', filters.from);
+    if (filters.to) params.append('to', filters.to);
 
-    const url = `/partner/reports${params.toString() ? '?' + params.toString() : ''}`;
+    const url = `/partner/reports${
+      params.toString() ? '?' + params.toString() : ''
+    }`;
     const response = await apiClient.get<ReportsResponse>(url);
-    console.log('✅ PartnerAPI: getReports success — total:', response.pagination?.total);
+    console.log(
+      `✅ PartnerAPI: getReports success — page ${response.pagination.page}/${response.pagination.totalPages} — loaded: ${response.reports.length}, total: ${response.pagination.total}`,
+    );
     return response;
   }
 
@@ -211,17 +219,27 @@ class PartnerApiService {
    * GET /api/v1/partner/transactions
    * Supports: page, limit, from (YYYY-MM-DD), to (YYYY-MM-DD)
    */
-  async getTransactions(filters: TransactionFilters = {}): Promise<TransactionsResponse> {
+  async getTransactions(
+    filters: TransactionFilters = {},
+  ): Promise<TransactionsResponse> {
     console.log('💳 PartnerAPI: getTransactions →', filters);
-    const params = new URLSearchParams();
-    if (filters.page)  params.append('page',  String(filters.page));
-    if (filters.limit) params.append('limit', String(filters.limit));
-    if (filters.from)  params.append('from',  filters.from);
-    if (filters.to)    params.append('to',    filters.to);
 
-    const url = `/partner/transactions${params.toString() ? '?' + params.toString() : ''}`;
+    const params = new URLSearchParams();
+
+    // ✅ Default to page 1, limit 30 (sweet spot for mobile)
+    params.append('page', filters.page?.toString() || '1');
+    params.append('limit', filters.limit?.toString() || '30');
+
+    if (filters.startDate) params.append('startDate', filters.startDate);
+    if (filters.endDate) params.append('endDate', filters.endDate);
+    if (filters.machineId) params.append('machineId', filters.machineId);
+
+    const url = `/partner/transactions${params.toString() ? `?${params}` : ''}`;
     const response = await apiClient.get<TransactionsResponse>(url);
-    console.log('✅ PartnerAPI: getTransactions success — total:', response.pagination?.total);
+
+    console.log(
+      `✅ PartnerAPI: getTransactions success — page ${response.pagination.page}/${response.pagination.totalPages} — loaded: ${response.transactions.length}, total: ${response.pagination.total}`,
+    );
     return response;
   }
 

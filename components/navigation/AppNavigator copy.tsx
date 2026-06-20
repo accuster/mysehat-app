@@ -7,6 +7,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import SplashScreen from '../screens/auth/SplashScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 import CompleteProfileScreen from '../screens/auth/CompleteProfileScreen';
+import PartnerLoginScreen from '../screens/auth/PartnerLoginScreen';
 
 import ReportsScreen from '../screens/user/ReportsScreen';
 import TransactionsScreen from '../screens/user/TransactionsScreen';
@@ -19,6 +20,10 @@ import InstantReport, { ReportData } from '../screens/user/InstantReport';
 import ProfileScreen from '../screens/user/ProfileScreen';
 import ManageMembersScreen from '../screens/user/ManageMembersScreen';
 import RechargeScreen from '../screens/partner/RechargeScreen';
+import PartnerHomeScreen from '../screens/partner/PartnerHomeScreen';
+import PartnerTransactionsScreen from '../screens/partner/PartnerTransactionsScreen';
+import PartnerReportsScreen from '../screens/partner/PartnerReportsScreen';
+import PartnerProfileScreen from '../screens/partner/PartnerProfileScreen';
 
 // ✅ Import BottomTabNavigator
 import BottomTabNavigator from './BottomTabNavigator';
@@ -34,6 +39,7 @@ export type RootStackParamList = {
 export type AuthStackParamList = {
   Login: undefined;
   CompleteProfile: undefined;
+  PartnerLogin: undefined;
 };
 
 // ✅ UPDATED: Renamed stack screens to avoid bottom tab conflicts
@@ -43,6 +49,10 @@ export type AppStackParamList = {
   TransactionsStack: undefined;
   WalletStack: undefined;
   RechargeStack: undefined;
+  PartnerHome: undefined;
+  PartnerTransactions: undefined;
+  PartnerProfile: undefined;
+  PartnerReports: undefined;
   Support: undefined;
   Profile: undefined;
   ManageMembers: undefined;
@@ -95,6 +105,7 @@ function AuthNavigator() {
         name="CompleteProfile"
         component={CompleteProfileScreen}
       />
+      <AuthStack.Screen name="PartnerLogin" component={PartnerLoginScreen} />
     </AuthStack.Navigator>
   );
 }
@@ -125,10 +136,19 @@ function AppStackNavigator() {
       />
       <AppStack.Screen name="WalletStack" component={WalletScreen} />
       <AppStack.Screen name="RechargeStack" component={RechargeScreen} />
+      <AppStack.Screen
+        name="PartnerHome"
+        component={PartnerHomeScreen}
+      />
+      <AppStack.Screen
+        name="PartnerTransactions"
+        component={PartnerTransactionsScreen}
+      />
       <AppStack.Screen name="Support" component={SupportScreen} />
       <AppStack.Screen name="Profile" component={ProfileScreen} />
       <AppStack.Screen name="ManageMembers" component={ManageMembersScreen} />
-
+      <AppStack.Screen name="PartnerProfile" component={PartnerProfileScreen} />
+      <AppStack.Screen name="PartnerReports" component={PartnerReportsScreen} />
       <AppStack.Screen
         name="SelectUser"
         component={SelectUserContainer}

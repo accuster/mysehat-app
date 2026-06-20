@@ -21,7 +21,11 @@ import Loader from '../../common/Loader';
 import ErrorToast from '../../common/ErrorToast';
 import { useErrorToast } from '../../../hooks/useErrorToast';
 import { useAppDispatch, useAppSelector } from '../../../store/hook';
-import { partnerLogin, clearPartnerError } from '../../../store/slices/partnerAuthSlice';
+import {
+  partnerLogin,
+  clearPartnerError,
+} from '../../../store/slices/partnerAuthSlice';
+import { ADMIN_BASE_URL } from '../../../store/constant';
 
 const packageJson = require('../../../package.json');
 
@@ -30,24 +34,26 @@ type Props = {
 };
 
 export default function PartnerLoginScreen({ navigation }: Props) {
-  const isMounted    = useRef(true);
+  const isMounted = useRef(true);
   const isSubmitting = useRef(false);
 
   // ✅ Redux
-  const dispatch                  = useAppDispatch();
-  const { isLoading, error }      = useAppSelector(s => s.partnerAuth);
+  const dispatch = useAppDispatch();
+  const { isLoading, error } = useAppSelector(s => s.partnerAuth);
 
-  const [email,         setEmail]         = useState('');
-  const [password,      setPassword]      = useState('');
-  const [showPassword,  setShowPassword]  = useState(false);
-  const [emailError,    setEmailError]    = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
 
   const { toast, showError, hideToast } = useErrorToast();
 
   useEffect(() => {
     isMounted.current = true;
-    return () => { isMounted.current = false; };
+    return () => {
+      isMounted.current = false;
+    };
   }, []);
 
   // ✅ Show Redux errors via ErrorToast
@@ -106,23 +112,22 @@ export default function PartnerLoginScreen({ navigation }: Props) {
       if (!isMounted.current) return;
 
       if (partnerLogin.fulfilled.match(resultAction)) {
-        console.log('✅ Partner login success → PartnerDashboard');
-        // ✅ PartnerDashboard lives in AppStack, PartnerLogin is in AuthStack
-        // Must reset the root navigator to App, then navigate to PartnerDashboard
+        console.log('✅ Partner login success → PartnerHome');
+        // ✅ PartnerHome lives in AppStack, PartnerLogin is in AuthStack
+        // Must reset the root navigator to App, then navigate to PartnerHome
         navigation.getParent()?.reset({
           index: 0,
           routes: [
             {
               name: 'App',
               state: {
-                routes: [{ name: 'PartnerDashboard' }],
+                routes: [{ name: 'PartnerHome' }],
               },
             },
           ],
         });
       }
       // Errors are handled via the `error` useEffect + ErrorToast above
-
     } catch (err: any) {
       if (isMounted.current) {
         showError(err.message || 'Login failed. Please try again.');
@@ -134,7 +139,7 @@ export default function PartnerLoginScreen({ navigation }: Props) {
 
   const handleForgotPassword = useCallback(async () => {
     try {
-      const url       = 'https://admin.mysehat.ai/forgot-password';
+      const url = `${ADMIN_BASE_URL}/forgot-password`;
       const supported = await Linking.canOpenURL(url);
       if (supported) {
         await Linking.openURL(url);
@@ -191,7 +196,9 @@ export default function PartnerLoginScreen({ navigation }: Props) {
               </View>
             </View>
             <Text style={styles.title}>Partner Login</Text>
-            <Text style={styles.subtitle}>Sign in with your partner credentials</Text>
+            <Text style={styles.subtitle}>
+              Sign in with your partner credentials
+            </Text>
           </View>
 
           {/* Card */}
@@ -208,11 +215,15 @@ export default function PartnerLoginScreen({ navigation }: Props) {
               autoCorrect={false}
               style={[styles.input, emailError && styles.inputError]}
             />
-            {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
+            {emailError ? (
+              <Text style={styles.errorText}>{emailError}</Text>
+            ) : null}
 
             {/* Password */}
             <Text style={[styles.label, { marginTop: 14 }]}>Password</Text>
-            <View style={[styles.passwordRow, passwordError && styles.inputError]}>
+            <View
+              style={[styles.passwordRow, passwordError && styles.inputError]}
+            >
               <TextInput
                 value={password}
                 onChangeText={handlePasswordChange}
@@ -226,12 +237,16 @@ export default function PartnerLoginScreen({ navigation }: Props) {
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 style={styles.eyeBtn}
               >
-                {showPassword
-                  ? <EyeOff size={18} color="#6B7280" />
-                  : <Eye size={18} color="#6B7280" />}
+                {showPassword ? (
+                  <EyeOff size={18} color="#6B7280" />
+                ) : (
+                  <Eye size={18} color="#6B7280" />
+                )}
               </Pressable>
             </View>
-            {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
+            {passwordError ? (
+              <Text style={styles.errorText}>{passwordError}</Text>
+            ) : null}
 
             {/* Forgot Password */}
             <Pressable onPress={handleForgotPassword} style={styles.forgotBtn}>
@@ -260,10 +275,7 @@ export default function PartnerLoginScreen({ navigation }: Props) {
           </View>
 
           {/* Back to User Login */}
-          <Pressable
-            onPress={() => navigation.goBack()}
-            style={styles.backBtn}
-          >
+          <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Text style={styles.backBtnText}>← Back to User Login</Text>
           </Pressable>
         </View>
@@ -351,7 +363,11 @@ const styles = StyleSheet.create({
   btnDisabled: { opacity: 0.5 },
   btnPressed: { opacity: 0.7, transform: [{ scale: 0.98 }] },
 
-  dividerRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 20 },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
   dividerLine: { flex: 1, height: 1, backgroundColor: '#1F2937' },
   dividerText: { color: '#4B5563', marginHorizontal: 12, fontSize: 13 },
 
@@ -366,9 +382,31 @@ const styles = StyleSheet.create({
   backBtnText: { color: '#9CA3AF', fontWeight: '600', fontSize: 14 },
 
   footer: { marginTop: 24, paddingTop: 16, alignItems: 'center', gap: 8 },
-  footerText: { textAlign: 'center', color: '#4B5563', fontSize: 12, lineHeight: 18 },
-  versionText: { textAlign: 'center', color: '#4B5563', fontSize: 11, fontWeight: '500' },
+  footerText: {
+    textAlign: 'center',
+    color: '#4B5563',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  versionText: {
+    textAlign: 'center',
+    color: '#4B5563',
+    fontSize: 11,
+    fontWeight: '500',
+  },
 
-  loaderOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  loaderCard: { backgroundColor: '#111827', borderRadius: 16, padding: 24, minWidth: 200, borderWidth: 1, borderColor: '#1F2937' },
+  loaderOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loaderCard: {
+    backgroundColor: '#111827',
+    borderRadius: 16,
+    padding: 24,
+    minWidth: 200,
+    borderWidth: 1,
+    borderColor: '#1F2937',
+  },
 });

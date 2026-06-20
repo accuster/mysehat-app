@@ -22,7 +22,7 @@ type Props = {
 
 export default function InAppBrowser({ visible, url, title, onClose }: Props) {
   const [loading, setLoading] = useState(true);
-  const loadTimeoutRef = useRef<number | null>(null);
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Reset loader when browser opens
   useEffect(() => {
@@ -68,35 +68,40 @@ export default function InAppBrowser({ visible, url, title, onClose }: Props) {
           source={{ uri: url }}
           javaScriptEnabled
           domStorageEnabled
+          cacheEnabled={false}
           startInLoadingState={false}
+          // ✅ Force hide header/footer after page loads (backup method)
+          injectedJavaScript={`
+    (function() {
+      var params = new URLSearchParams(window.location.search);
+      if (params.get('embed') !== 'true') {
+        window.location.href = window.location.pathname + '?embed=true';
+      }
+    })();
+    true;
+  `}
           onLoadStart={() => {
             setLoading(true);
-
-            // Safety timeout (prevents infinite loader)
             if (loadTimeoutRef.current) {
               clearTimeout(loadTimeoutRef.current);
             }
-
             loadTimeoutRef.current = setTimeout(() => {
               setLoading(false);
             }, 8000);
           }}
           onLoadEnd={() => {
             setLoading(false);
-
             if (loadTimeoutRef.current) {
               clearTimeout(loadTimeoutRef.current);
               loadTimeoutRef.current = null;
             }
           }}
           onNavigationStateChange={navState => {
-            // Handles SPA/internal navigation
             if (!navState.loading) {
               setLoading(false);
             }
           }}
           onShouldStartLoadWithRequest={request => {
-            // Allow only mysehat.ai inside WebView
             if (!request.url.includes('mysehat.ai')) {
               Linking.openURL(request.url);
               return false;

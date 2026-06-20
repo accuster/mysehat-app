@@ -1,5 +1,4 @@
 // components/navigation/AppNavigator.tsx
-// ✅ UPDATED: Renamed stack screens to avoid conflicts with bottom tab screens
 import React from 'react';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -20,10 +19,13 @@ import InstantReport, { ReportData } from '../screens/user/InstantReport';
 import ProfileScreen from '../screens/user/ProfileScreen';
 import ManageMembersScreen from '../screens/user/ManageMembersScreen';
 import RechargeScreen from '../screens/partner/RechargeScreen';
-import PartnerDashboardScreen from '../screens/partner/PartnerDashboardScreen';
+import PartnerHomeScreen from '../screens/partner/PartnerHomeScreen';
 import PartnerTransactionsScreen from '../screens/partner/PartnerTransactionsScreen';
+import PartnerReportsScreen from '../screens/partner/PartnerReportsScreen';
+import PartnerProfileScreen from '../screens/partner/PartnerProfileScreen';
+import BMIRecordsScreen from '../screens/partner/BMIRecordsScreen';
+import PartnerReportPreview from '../screens/partner/PartnerReportPreview';
 
-// ✅ Import BottomTabNavigator
 import BottomTabNavigator from './BottomTabNavigator';
 
 import { COLORS } from '../../theme/colors';
@@ -40,15 +42,20 @@ export type AuthStackParamList = {
   PartnerLogin: undefined;
 };
 
-// ✅ UPDATED: Renamed stack screens to avoid bottom tab conflicts
 export type AppStackParamList = {
   Tabs: undefined;
   ReportsStack: undefined;
   TransactionsStack: undefined;
   WalletStack: undefined;
   RechargeStack: undefined;
-  PartnerDashboard: undefined;
+  PartnerHome: undefined;
   PartnerTransactions: undefined;
+  PartnerProfile: undefined;
+  PartnerReports: undefined;
+  BMIRecords: undefined;
+  PartnerReportPreview: {
+    record: any;
+  };
   Support: undefined;
   Profile: undefined;
   ManageMembers: undefined;
@@ -115,7 +122,6 @@ function AppStackNavigator() {
         animation: 'slide_from_right',
       }}
     >
-      {/* ✅ Bottom Tab Navigator (contains: Home, Reports, QR, Wallet, Transactions) */}
       <AppStack.Screen
         name="Tabs"
         component={BottomTabNavigator}
@@ -124,19 +130,20 @@ function AppStackNavigator() {
         }}
       />
 
-      {/* ✅ UPDATED: Stack-only screens with new names */}
       <AppStack.Screen name="ReportsStack" component={ReportsScreen} />
-      <AppStack.Screen
-        name="TransactionsStack"
-        component={TransactionsScreen}
-      />
+      <AppStack.Screen name="TransactionsStack" component={TransactionsScreen} />
       <AppStack.Screen name="WalletStack" component={WalletScreen} />
       <AppStack.Screen name="RechargeStack" component={RechargeScreen} />
-      <AppStack.Screen name="PartnerDashboard" component={PartnerDashboardScreen} />
+      <AppStack.Screen name="PartnerHome" component={PartnerHomeScreen} />
       <AppStack.Screen name="PartnerTransactions" component={PartnerTransactionsScreen} />
       <AppStack.Screen name="Support" component={SupportScreen} />
       <AppStack.Screen name="Profile" component={ProfileScreen} />
       <AppStack.Screen name="ManageMembers" component={ManageMembersScreen} />
+      <AppStack.Screen name="PartnerProfile" component={PartnerProfileScreen} />
+      <AppStack.Screen name="PartnerReports" component={PartnerReportsScreen} />
+      
+      <AppStack.Screen name="BMIRecords" component={BMIRecordsScreen} />
+      <AppStack.Screen name="PartnerReportPreview" component={PartnerReportPreview} />
 
       <AppStack.Screen
         name="SelectUser"

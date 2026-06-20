@@ -8,6 +8,7 @@ import axios, {
 import NetInfo from '@react-native-community/netinfo';
 import { storage } from './storage';
 import { API_BASE_URL } from '../store/constant';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
  * Custom error class for network-related errors
@@ -166,17 +167,34 @@ class ApiClient {
         // 2. Attach auth token — skip if:
         //    a) This is the refresh token endpoint
         //    b) Authorization header is ALREADY set by the caller
-        //       e.g. partnerAuthApi.validateToken() sets its own partner token
         const alreadyHasAuth = !!config.headers?.Authorization;
 
         if (
           !config.url?.includes('/wa-auth/refresh-token') &&
+          !config.url?.includes('/partner-auth/refresh-token') &&
           !alreadyHasAuth
         ) {
-          const token = await storage.getToken();
-          if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-            console.log('🔑 Token attached');
+          // ✅ Detect if this is a partner request
+          const isPartnerRequest =
+            config.url?.includes('/partner-auth/') ||
+            config.url?.includes('/partner/');
+
+          if (isPartnerRequest) {
+            // Use partner token
+            const partnerToken = await AsyncStorage.getItem('partner_token');
+            if (partnerToken) {
+              config.headers.Authorization = `Bearer ${partnerToken}`;
+              console.log('🔑 Partner token attached');
+            } else {
+              console.log('⚠️ Partner request but no partner token found!');
+            }
+          } else {
+            // Use user token
+            const token = await storage.getToken();
+            if (token) {
+              config.headers.Authorization = `Bearer ${token}`;
+              console.log('🔑 User token attached');
+            }
           }
         } else if (alreadyHasAuth) {
           console.log('🔑 Token already set by caller — skipping override');

@@ -100,7 +100,7 @@ export const partnerLogin = createAsyncThunk(
 
       return rejectWithValue(response.message || 'Login failed');
     } catch (err: any) {
-      console.error('❌ Redux partnerLogin error:', err.message);
+      console.log('❌ Redux partnerLogin error:', err.message);
       return rejectWithValue(err.message || 'Login failed. Please try again.');
     }
   },
@@ -120,7 +120,7 @@ export const loadPartnerFromStorage = createAsyncThunk(
       console.log('ℹ️ No partner session found');
       return rejectWithValue('No partner session');
     } catch (err: any) {
-      console.error('❌ loadPartnerFromStorage error:', err.message);
+      console.log('❌ loadPartnerFromStorage error:', err.message);
       return rejectWithValue(err.message);
     }
   },

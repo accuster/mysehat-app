@@ -1,9 +1,9 @@
-// store/index.ts - WITH REDUX PERSIST
+// store/index.ts
 import { configureStore, combineReducers } from '@reduxjs/toolkit';
-// import { persistStore, persistReducer } from 'redux-persist';
 import {
   persistStore,
   persistReducer,
+  createTransform,
   FLUSH,
   REHYDRATE,
   PAUSE,
@@ -22,16 +22,57 @@ import partnerAuthReducer from './slices/partnerAuthSlice';
 import paymentReducer from './slices/paymentSlice';
 import partnerReducer from './slices/partnerSlice';
 import walletReducer from './slices/walletSlice';
+import bluetoothReducer, { BluetoothState } from './slices/bluetoothSlice';
+import partnerWalletReducer from './slices/partnerWalletSlice';
+import machineRechargeReducer from './slices/machineRechargeSlice';
 
-// ✅ Redux Persist Configuration
+// Only these 5 fields are saved to disk — everything else is session-only.
+type PersistedBluetoothState = Pick<
+  BluetoothState,
+  | 'lastConnectedDevice'
+  | 'autoReconnect'
+  | 'preferredDevices'
+  | 'connectionHistory'
+  | 'disconnectCount'
+>;
+
+const bluetoothPersistTransform = createTransform<
+  BluetoothState,
+  PersistedBluetoothState
+>(
+  // inbound: state → disk. Only save permanent fields.
+  inboundState => ({
+    lastConnectedDevice: inboundState.lastConnectedDevice,
+    autoReconnect: inboundState.autoReconnect,
+    preferredDevices: inboundState.preferredDevices,
+    connectionHistory: inboundState.connectionHistory,
+    disconnectCount: inboundState.disconnectCount,
+  }),
+  // outbound: disk → state. Session fields always reset, durable fields read from disk.
+  outboundState => ({
+    isConnected: false,
+    isConnecting: false,
+    currentDevice: null,
+    reconnectAttempts: 0,
+    maxReconnectAttempts: 5,
+    lastDisconnectTime: null,
+    lastConnectedDevice: outboundState?.lastConnectedDevice ?? null,
+    autoReconnect: outboundState?.autoReconnect ?? true,
+    preferredDevices: outboundState?.preferredDevices ?? [],
+    connectionHistory: outboundState?.connectionHistory ?? [],
+    disconnectCount: outboundState?.disconnectCount ?? 0,
+  }),
+  { whitelist: ['bluetooth'] },
+);
+
 const persistConfig = {
   key: 'root',
   storage: AsyncStorage,
-  whitelist: ['auth', 'members', 'partnerAuth', 'payment'], // ✅ Persist auth, members, partnerAuth and  payment slices
-  blacklist: ['reports', 'transactions', 'orders', 'partner', 'wallet'], // ❌ Don't persist (fetch fresh)
+  whitelist: ['auth', 'members', 'partnerAuth', 'payment', 'bluetooth'],
+  blacklist: ['reports', 'transactions', 'orders', 'partner', 'wallet', 'partnerWallet', 'machineRecharge'],
+  transforms: [bluetoothPersistTransform],
 };
 
-// ✅ Combine all reducers
 const rootReducer = combineReducers({
   auth: authReducer,
   members: memberReducer,
@@ -42,25 +83,26 @@ const rootReducer = combineReducers({
   payment: paymentReducer,
   partner: partnerReducer,
   wallet: walletReducer,
+  partnerWallet: partnerWalletReducer,
+  machineRecharge: machineRechargeReducer,
+  bluetooth: bluetoothReducer,
 });
 
-// ✅ Create persisted reducer
-const persistedReducer = persistReducer(persistConfig, rootReducer);
+const persistedReducer = persistReducer(
+  persistConfig,
+  rootReducer as any,
+) as typeof rootReducer;
 
-// ✅ Configure store with persisted reducer
 export const store = configureStore({
   reducer: persistedReducer,
   middleware: getDefaultMiddleware =>
     getDefaultMiddleware({
       serializableCheck: {
-        // ✅ Ignore redux-persist actions
-        // ignoredActions: [FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER],
         ignoredActions: [FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER],
       },
     }),
 });
 
-// ✅ Create persistor
 export const persistor = persistStore(store);
 
 export type RootState = ReturnType<typeof store.getState>;

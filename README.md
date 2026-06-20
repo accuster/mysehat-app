@@ -95,3 +95,148 @@ To learn more about React Native, take a look at the following resources:
 - [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
 - [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
 - [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+
+
+===============================================================================================================================
+
+MYSEHATAPP/
+│
+├── __tests__/
+├── .bundle/
+├── .vscode/
+├── android/
+├── assets/
+├── ios/
+├── node_modules/
+│
+├── components/
+│   ├── common/
+│   │   ├── drawer/
+│   │   │   ├── DrawerHeader.tsx
+│   │   │   └── DrawerItem.tsx
+│   │   │
+│   │   ├── AppDrawer.tsx
+│   │   ├── AppHeader.tsx
+│   │   ├── Drawer.tsx
+│   │   ├── ErrorToast.tsx
+│   │   ├── GenderDropdown.tsx
+│   │   ├── InAppBrowser.tsx
+│   │   ├── InAppUpdateBanner.tsx
+│   │   ├── Loader.tsx
+│   │   └── NetworkBanner.tsx
+│   │
+│   ├── navigation/
+│   │   ├── AppNavigator.tsx
+│   │   ├── AuthNavigator.tsx
+│   │   └── BottomTabNavigator.tsx
+│   │
+│   └── screens/
+│       ├── auth/
+│       │   ├── CompleteProfileScreen.tsx
+│       │   ├── LoginScreen.tsx
+│       │   ├── PartnerLoginScreen.tsx
+│       │   └── SplashScreen.tsx
+│       │
+│       ├── partner/
+│       │   ├── BMIRecordsScreen.tsx
+│       │   ├── PartnerHomeScreen.tsx
+│       │   ├── PartnerProfileScreen.tsx
+│       │   ├── PartnerReportPreview.tsx
+│       │   ├── PartnerReportsScreen.tsx
+│       │   ├── PartnerTransactionsScreen.tsx
+│       │   └── RechargeScreen.tsx
+│       │
+│       └── user/
+│           ├── AddMemberModal.tsx
+│           ├── HomeScreen.tsx
+│           ├── InstantReport.tsx
+│           ├── ManageMembersScreen.tsx
+│           ├── PaymentSuccessScreen.tsx
+│           ├── PayScreen.tsx
+│           ├── ProfileScreen.tsx
+│           ├── ReportsScreen.tsx
+│           ├── ScanScreen.tsx
+│           ├── SelectUserBottomSheet.tsx
+│           ├── SelectUserContainer.tsx
+│           ├── SelectUserScreen.tsx
+│           ├── SupportScreen.tsx
+│           ├── SupportView.tsx
+│           ├── TransactionsScreen.tsx
+│           └── WalletScreen.tsx
+│
+├── contexts/
+│   └── ToastContext.tsx
+│
+├── hooks/
+│   ├── useApiErrorHandler.ts
+│   ├── useBluetooth.ts
+│   ├── useErrorToast.ts
+│   ├── useInAppUpdate.ts
+│   └── useNetworkStatus.ts
+│
+├── store/
+│   ├── services/
+│   │   ├── authApi.ts
+│   │   ├── BluetoothService.ts
+│   │   ├── memberApi.ts
+│   │   ├── orderApi.ts
+│   │   ├── partnerApi.ts
+│   │   ├── partnerAuthApi.ts
+│   │   ├── paymentApi.ts
+│   │   ├── reportApi.ts
+│   │   ├── transactionApi.ts
+│   │   └── walletApi.ts
+│   │   └── machineRechargeApi.ts
+│   │   └── partnerWalletApi.ts
+│   │
+│   ├── slices/
+│   │   ├── authSlice.ts
+│   │   ├── bluetoothSlice.ts
+│   │   ├── memberSlice.ts
+│   │   ├── orderSlice.ts
+│   │   ├── partnerAuthSlice.ts
+│   │   ├── partnerSlice.ts
+│   │   ├── paymentSlice.ts
+│   │   ├── reportSlice.ts
+│   │   ├── transactionSlice.ts
+│   │   └── walletSlice.ts
+│   │   └── machineRechargeSlice.ts
+│   │   └── partnerWalletSlice.ts
+│   │
+│   ├── constant.ts
+│   ├── hook.ts
+│   └── index.ts
+│
+├── theme/
+│   └── colors.ts
+│
+├── types/
+│   ├── auth.types.ts
+│   └── react-native-razorpay.d.ts
+│
+├── utils/
+│   ├── apiClient.ts
+│   ├── encryption.ts
+│   ├── generateReceiptPdf.ts
+│   ├── generateReportPdf.ts
+│   ├── healthMetricsCalculator.ts
+│   ├── notificationService.ts
+│   ├── partnerStorage.ts
+│   ├── storage.ts
+│   └── validators.ts
+│
+├── .eslintrc.js
+├── .gitignore
+├── .prettierrc.js
+├── .watchmanconfig
+├── App.tsx
+├── app.json
+├── babel.config.js
+├── Gemfile
+├── index.js
+├── jest.config.js
+├── metro.config.js
+├── package-lock.json
+├── package.json
+├── README.md
+└── tsconfig.json

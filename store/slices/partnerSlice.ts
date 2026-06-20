@@ -24,6 +24,10 @@ export interface PartnerState {
   reportsPagination: PaginationMeta | null;
   reportsLoading: boolean;
   reportsError: string | null;
+  
+  // Reports pagination
+  reportsLoadingMore: boolean;
+  reportsAllLoaded: boolean;
 
   // Single report
   selectedReport: PartnerReport | null;
@@ -40,6 +44,10 @@ export interface PartnerState {
   selectedTransaction: PartnerTransaction | null;
   selectedTransactionLoading: boolean;
   selectedTransactionError: string | null;
+
+  // Transactions pagination
+  transactionsLoadingMore: boolean;
+  transactionsAllLoaded: boolean;
 }
 
 const initialState: PartnerState = {
@@ -51,6 +59,8 @@ const initialState: PartnerState = {
   reportsPagination: null,
   reportsLoading: false,
   reportsError: null,
+  reportsLoadingMore: false,
+  reportsAllLoaded: false,
 
   selectedReport: null,
   selectedReportLoading: false,
@@ -64,6 +74,9 @@ const initialState: PartnerState = {
   selectedTransaction: null,
   selectedTransactionLoading: false,
   selectedTransactionError: null,
+
+  transactionsLoadingMore: false,
+  transactionsAllLoaded: false,
 };
 
 // ─── Thunks ───────────────────────────────────────────────────────────────────
@@ -78,7 +91,7 @@ export const fetchPartnerProfile = createAsyncThunk(
       const response = await partnerApi.getProfile(authId);
       return response.profile;
     } catch (err: any) {
-      console.error('❌ fetchPartnerProfile error:', err.message);
+      console.log('❌ fetchPartnerProfile error:', err.message);
       return rejectWithValue(err.message || 'Failed to load profile.');
     }
   },
@@ -95,28 +108,63 @@ export const updatePartnerProfile = createAsyncThunk(
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('✏️ Redux: updatePartnerProfile');
       await partnerApi.updateProfile(authId, data);
-      // Re-fetch profile to get fresh data after update
       dispatch(fetchPartnerProfile(authId));
       return true;
     } catch (err: any) {
-      console.error('❌ updatePartnerProfile error:', err.message);
+      console.log('❌ updatePartnerProfile error:', err.message);
       return rejectWithValue(err.message || 'Failed to update profile.');
     }
   },
 );
 
-/** Fetch paginated reports */
+/** Fetch paginated reports (replaces existing list) */
 export const fetchPartnerReports = createAsyncThunk(
   'partner/fetchReports',
   async (filters: ReportFilters = {}, { rejectWithValue }) => {
     try {
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('📋 Redux: fetchPartnerReports', filters);
-      const response = await partnerApi.getReports(filters);
+      console.log('📋 Redux: fetchPartnerReports (fresh load)', filters);
+      const response = await partnerApi.getReports({
+        ...filters,
+        page: 1, // ✅ Always start from page 1 for fresh load
+      });
       return response;
     } catch (err: any) {
-      console.error('❌ fetchPartnerReports error:', err.message);
+      console.log('❌ fetchPartnerReports error:', err.message);
       return rejectWithValue(err.message || 'Failed to load reports.');
+    }
+  },
+);
+
+/** ✅ NEW: Load more reports (append to existing list) */
+export const loadMorePartnerReports = createAsyncThunk(
+  'partner/loadMoreReports',
+  async (filters: ReportFilters = {}, { getState, rejectWithValue }) => {
+    try {
+      const state = getState() as { partner: PartnerState };
+      const currentPage = state.partner.reportsPagination?.page || 1;
+      const totalPages = state.partner.reportsPagination?.totalPages || 1;
+
+      // ✅ Don't load if already on last page
+      if (currentPage >= totalPages) {
+        console.log('📄 Already on last page — no more to load');
+        return null;
+      }
+
+      const nextPage = currentPage + 1;
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log(
+        `📋 Redux: loadMoreReports — loading page ${nextPage}/${totalPages}`,
+      );
+
+      const response = await partnerApi.getReports({
+        ...filters,
+        page: nextPage,
+      });
+      return response;
+    } catch (err: any) {
+      console.log('❌ loadMoreReports error:', err.message);
+      return rejectWithValue(err.message || 'Failed to load more.');
     }
   },
 );
@@ -131,24 +179,59 @@ export const fetchPartnerReportById = createAsyncThunk(
       const response = await partnerApi.getReportById(reportId);
       return response.report;
     } catch (err: any) {
-      console.error('❌ fetchPartnerReportById error:', err.message);
+      console.log('❌ fetchPartnerReportById error:', err.message);
       return rejectWithValue(err.message || 'Failed to load report.');
     }
   },
 );
 
-/** Fetch paginated transactions */
+/** Fetch paginated transactions (replaces existing list) */
 export const fetchPartnerTransactions = createAsyncThunk(
   'partner/fetchTransactions',
   async (filters: TransactionFilters = {}, { rejectWithValue }) => {
     try {
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('💳 Redux: fetchPartnerTransactions', filters);
-      const response = await partnerApi.getTransactions(filters);
+      console.log('💳 Redux: fetchPartnerTransactions (fresh load)', filters);
+      const response = await partnerApi.getTransactions({
+        ...filters,
+        page: 1,
+      });
       return response;
     } catch (err: any) {
-      console.error('❌ fetchPartnerTransactions error:', err.message);
+      console.log('❌ fetchPartnerTransactions error:', err.message);
       return rejectWithValue(err.message || 'Failed to load transactions.');
+    }
+  },
+);
+
+/** Load more transactions (append to existing list) */
+export const loadMorePartnerTransactions = createAsyncThunk(
+  'partner/loadMoreTransactions',
+  async (filters: TransactionFilters = {}, { getState, rejectWithValue }) => {
+    try {
+      const state = getState() as { partner: PartnerState };
+      const currentPage = state.partner.transactionsPagination?.page || 1;
+      const totalPages = state.partner.transactionsPagination?.totalPages || 1;
+
+      if (currentPage >= totalPages) {
+        console.log('📄 Already on last page — no more to load');
+        return null;
+      }
+
+      const nextPage = currentPage + 1;
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log(
+        `💳 Redux: loadMoreTransactions — loading page ${nextPage}/${totalPages}`,
+      );
+
+      const response = await partnerApi.getTransactions({
+        ...filters,
+        page: nextPage,
+      });
+      return response;
+    } catch (err: any) {
+      console.log('❌ loadMoreTransactions error:', err.message);
+      return rejectWithValue(err.message || 'Failed to load more.');
     }
   },
 );
@@ -163,7 +246,7 @@ export const fetchPartnerTransactionById = createAsyncThunk(
       const response = await partnerApi.getTransactionById(orderId);
       return response.transaction;
     } catch (err: any) {
-      console.error('❌ fetchPartnerTransactionById error:', err.message);
+      console.log('❌ fetchPartnerTransactionById error:', err.message);
       return rejectWithValue(err.message || 'Failed to load transaction.');
     }
   },
@@ -175,33 +258,37 @@ const partnerSlice = createSlice({
   name: 'partner',
   initialState,
   reducers: {
-    /** Clear selected report (e.g. on screen unmount) */
     clearSelectedReport: state => {
       state.selectedReport = null;
       state.selectedReportError = null;
     },
-    /** Clear selected transaction (e.g. on screen unmount) */
     clearSelectedTransaction: state => {
       state.selectedTransaction = null;
       state.selectedTransactionError = null;
     },
-    /** Clear all partner data on logout */
     resetPartnerData: () => initialState,
-    /** Clear profile error */
     clearProfileError: state => {
       state.profileError = null;
     },
-    /** Clear reports error */
     clearReportsError: state => {
       state.reportsError = null;
     },
-    /** Clear transactions error */
     clearTransactionsError: state => {
       state.transactionsError = null;
     },
+    resetTransactionsPagination: state => {
+      state.transactions = [];
+      state.transactionsPagination = null;
+      state.transactionsAllLoaded = false;
+    },
+    // Reset reports pagination
+    resetReportsPagination: state => {
+      state.reports = [];
+      state.reportsPagination = null;
+      state.reportsAllLoaded = false;
+    },
   },
   extraReducers: builder => {
-
     // ── fetchPartnerProfile ───────────────────────────────────────────────
     builder
       .addCase(fetchPartnerProfile.pending, state => {
@@ -225,7 +312,6 @@ const partnerSlice = createSlice({
       })
       .addCase(updatePartnerProfile.fulfilled, state => {
         state.profileLoading = false;
-        // Profile data refreshed via fetchPartnerProfile dispatch inside thunk
       })
       .addCase(updatePartnerProfile.rejected, (state, action) => {
         state.profileLoading = false;
@@ -237,15 +323,49 @@ const partnerSlice = createSlice({
       .addCase(fetchPartnerReports.pending, state => {
         state.reportsLoading = true;
         state.reportsError = null;
+        state.reportsAllLoaded = false; // ✅ Reset
       })
       .addCase(fetchPartnerReports.fulfilled, (state, action) => {
         state.reportsLoading = false;
-        state.reports = action.payload.reports;           // replace on each fetch
+        state.reports = action.payload.reports; // ✅ Replace (fresh load)
         state.reportsPagination = action.payload.pagination;
+        // ✅ Check if all pages loaded
+        const { page, totalPages } = action.payload.pagination;
+        state.reportsAllLoaded = page >= totalPages;
       })
       .addCase(fetchPartnerReports.rejected, (state, action) => {
         state.reportsLoading = false;
         state.reportsError = action.payload as string;
+      });
+
+    // ── loadMorePartnerReports (NEW) ──────────────────────────────────────
+    builder
+      .addCase(loadMorePartnerReports.pending, state => {
+        state.reportsLoadingMore = true;
+      })
+      .addCase(loadMorePartnerReports.fulfilled, (state, action) => {
+        state.reportsLoadingMore = false;
+
+        if (action.payload === null) {
+          state.reportsAllLoaded = true;
+          return;
+        }
+
+        // ✅ Append new reports to existing list
+        state.reports = [...state.reports, ...action.payload.reports];
+        state.reportsPagination = action.payload.pagination;
+
+        // ✅ Check if we loaded all pages
+        const { page, totalPages } = action.payload.pagination;
+        state.reportsAllLoaded = page >= totalPages;
+
+        console.log(
+          `✅ Loaded page ${page}/${totalPages} — total in state: ${state.reports.length}`,
+        );
+      })
+      .addCase(loadMorePartnerReports.rejected, (state, action) => {
+        state.reportsLoadingMore = false;
+        console.warn('⚠️ Load more failed (silent):', action.payload);
       });
 
     // ── fetchPartnerReportById ────────────────────────────────────────────
@@ -269,15 +389,49 @@ const partnerSlice = createSlice({
       .addCase(fetchPartnerTransactions.pending, state => {
         state.transactionsLoading = true;
         state.transactionsError = null;
+        state.transactionsAllLoaded = false;
       })
       .addCase(fetchPartnerTransactions.fulfilled, (state, action) => {
         state.transactionsLoading = false;
-        state.transactions = action.payload.transactions; // replace on each fetch
+        state.transactions = action.payload.transactions;
         state.transactionsPagination = action.payload.pagination;
+        const { page, totalPages } = action.payload.pagination;
+        state.transactionsAllLoaded = page >= totalPages;
       })
       .addCase(fetchPartnerTransactions.rejected, (state, action) => {
         state.transactionsLoading = false;
         state.transactionsError = action.payload as string;
+      });
+
+    // ── loadMorePartnerTransactions ───────────────────────────────────────
+    builder
+      .addCase(loadMorePartnerTransactions.pending, state => {
+        state.transactionsLoadingMore = true;
+      })
+      .addCase(loadMorePartnerTransactions.fulfilled, (state, action) => {
+        state.transactionsLoadingMore = false;
+
+        if (action.payload === null) {
+          state.transactionsAllLoaded = true;
+          return;
+        }
+
+        state.transactions = [
+          ...state.transactions,
+          ...action.payload.transactions,
+        ];
+        state.transactionsPagination = action.payload.pagination;
+
+        const { page, totalPages } = action.payload.pagination;
+        state.transactionsAllLoaded = page >= totalPages;
+
+        console.log(
+          `✅ Loaded page ${page}/${totalPages} — total in state: ${state.transactions.length}`,
+        );
+      })
+      .addCase(loadMorePartnerTransactions.rejected, (state, action) => {
+        state.transactionsLoadingMore = false;
+        console.warn('⚠️ Load more failed (silent):', action.payload);
       });
 
     // ── fetchPartnerTransactionById ───────────────────────────────────────
@@ -305,6 +459,8 @@ export const {
   clearProfileError,
   clearReportsError,
   clearTransactionsError,
+  resetTransactionsPagination,
+  resetReportsPagination,
 } = partnerSlice.actions;
 
 export default partnerSlice.reducer;
