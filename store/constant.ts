@@ -3,6 +3,7 @@ export const API_BASE_URL =  "https://app.mysehat.ai/api/v1";
 
 // ✅ Base URL for admin portal (where profile images are stored)
 export const ADMIN_BASE_URL = 'https://admin.mysehat.ai';
+export const ADMIN_API_BASE_URL = "https://admin.mysehat.ai/api/v1"; 
 export const USER_PROFILE_IMAGE_BASE_URL = "https://app.mysehat.ai";
 
 // store/constants.ts

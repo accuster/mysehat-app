@@ -1,4 +1,6 @@
 // store/services/partnerApi.ts
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ADMIN_API_BASE_URL } from '../constant';
 import { apiClient } from '../../utils/apiClient';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -63,6 +65,11 @@ export interface UpdateProfileRequest {
   newPassword?: string;
 }
 
+interface UpdateAvatarResponse {
+  success: boolean;
+  message: string;
+  profile_image: string;
+}
 // ─── Report ───────────────────────────────────────────────────────────────────
 
 export interface PartnerReport {
@@ -178,6 +185,75 @@ class PartnerApiService {
   }
 
   /**
+   * PUT /api/v1/partner/avatar  (on admin.mysehat.ai)
+   *
+   * Uploads a new profile image to admin.mysehat.ai and updates
+   * organizations.profile_image column via partner JWT.
+   *
+   * @param imageUri Local file URI from image picker (must start with file://)
+   */
+  async updateAvatar(imageUri: string): Promise<UpdateAvatarResponse> {
+    console.log('🖼️  PartnerAPI: updateAvatar →', imageUri);
+
+    if (!imageUri.startsWith('file://')) {
+      throw new Error('Invalid image URI — must be a local file');
+    }
+
+    // Extract filename + guess mime type
+    const filename = imageUri.split('/').pop() || `avatar_${Date.now()}.jpg`;
+    const ext = (filename.split('.').pop() || 'jpg').toLowerCase();
+    const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
+
+    // Get partner token (manually — apiClient can't be reused for this)
+    const partnerToken = await AsyncStorage.getItem('partner_token');
+    if (!partnerToken) {
+      throw new Error('Partner not authenticated');
+    }
+
+    // Build multipart FormData
+    const formData = new FormData();
+    formData.append('profileImage', {
+      uri: imageUri,
+      name: filename,
+      type: mimeType,
+    } as any);
+
+    const url = `${ADMIN_API_BASE_URL}/partner/avatar`;
+    console.log('📤 Uploading to:', url);
+
+    // Direct fetch — bypass apiClient because:
+    //   1. Different base URL (admin.mysehat.ai vs app.mysehat.ai)
+    //   2. FormData needs auto Content-Type with boundary
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${partnerToken}`,
+        // ⚠️ DO NOT set Content-Type — RN sets multipart boundary automatically
+      },
+      body: formData,
+    });
+
+    const responseText = await response.text();
+    let data: any;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      console.log('❌ Non-JSON response:', responseText.slice(0, 200));
+      throw new Error('Server returned invalid response');
+    }
+
+    if (!response.ok) {
+      console.log('❌ Avatar upload failed:', data);
+      throw new Error(
+        data?.message || `Upload failed (status ${response.status})`,
+      );
+    }
+
+    console.log('✅ Avatar uploaded:', data.profile_image);
+    return data as UpdateAvatarResponse;
+  }
+
+  /**
    * GET /api/v1/partner/reports
    * ✅ UPDATED: Added default limit of 30 for pagination
    * Supports: page, limit, from (YYYY-MM-DD), to (YYYY-MM-DD)
@@ -185,11 +261,11 @@ class PartnerApiService {
   async getReports(filters: ReportFilters = {}): Promise<ReportsResponse> {
     console.log('📋 PartnerAPI: getReports →', filters);
     const params = new URLSearchParams();
-    
+
     // ✅ Default to page 1, limit 30 (sweet spot for mobile)
     params.append('page', filters.page?.toString() || '1');
     params.append('limit', filters.limit?.toString() || '30');
-    
+
     if (filters.from) params.append('from', filters.from);
     if (filters.to) params.append('to', filters.to);
 

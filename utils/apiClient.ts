@@ -177,7 +177,8 @@ class ApiClient {
           // ✅ Detect if this is a partner request
           const isPartnerRequest =
             config.url?.includes('/partner-auth/') ||
-            config.url?.includes('/partner/');
+            config.url?.includes('/partner/') ||
+            config.url?.includes('/partner-bmi-reports'); 
 
           if (isPartnerRequest) {
             // Use partner token

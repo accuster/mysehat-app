@@ -51,6 +51,7 @@ import {
 } from 'react-native-image-picker';
 import { useApiErrorHandler } from '../../../hooks/useApiErrorHandler';
 import { ADMIN_BASE_URL } from '../../../store/constant';
+import { partnerApi } from '../../../store/services/partnerApi';
 
 type Props = {
   navigation: any;
@@ -576,65 +577,50 @@ export default function PartnerProfileScreen({ navigation }: Props) {
 
     setIsUpdating(true);
 
-    // Prepare image
-    let imageToSend: string | null = null;
-    if (avatar) {
-      if (avatar.startsWith('file://')) {
-        imageToSend = avatar;
-        console.log('📸 Sending new image file');
-      } else if (
-        avatar.startsWith('http://') ||
-        avatar.startsWith('https://')
-      ) {
-        console.log('ℹ️ Image unchanged, not sending to backend');
-        imageToSend = null;
+    try {
+      // ─── Step 1: If new avatar picked, upload it to admin.mysehat.ai ───
+      const hasNewAvatar = avatar !== null && avatar.startsWith('file://');
+
+      if (hasNewAvatar && avatar) {
+        console.log('📸 Step 1: Uploading new avatar to admin.mysehat.ai…');
+        await partnerApi.updateAvatar(avatar);
+        console.log('✅ Step 1 done: avatar uploaded');
       } else {
-        imageToSend = avatar;
+        console.log('ℹ️ No new avatar — skipping upload');
       }
-    }
 
-    // Prepare update data
-    const updateData: any = {
-      full_name: fullName.trim(),
-      username: username.trim(),
-      mobile_number: mobile.trim(),
-    };
+      // ─── Step 2: Update text fields via app.mysehat.ai (existing flow) ───
+      // ⚠️ We deliberately DO NOT send profile_image here — that's handled
+      //     by admin.mysehat.ai in Step 1.
+      const textUpdateData = {
+        full_name: fullName.trim(),
+        username: username.trim(),
+        mobile_number: mobile.trim(),
+      };
 
-    if (imageToSend) {
-      updateData.profile_image = imageToSend;
-    }
+      console.log('✏️ Step 2: Updating text fields on app.mysehat.ai…');
+      await dispatch(
+        updatePartnerProfile({
+          authId: partnerUser.auth_id,
+          data: textUpdateData,
+        }),
+      ).unwrap();
+      console.log('✅ Step 2 done: text fields updated + profile re-fetched');
 
-    console.log('💾 Saving profile...');
-
-    const result = await executeApiCall(
-      () =>
-        dispatch(
-          updatePartnerProfile({
-            authId: partnerUser.auth_id,
-            data: updateData,
-          }),
-        ).unwrap(),
-      {
-        showSuccessToast: false,
-        showErrorToast: true,
-        customErrorMessage: 'Failed to update profile',
-        onSuccess: () => {
-          if (!isMounted.current) return;
-          console.log('✅ Profile updated successfully');
-          setIsEditMode(false);
-          setIsUpdating(false);
-          setShowSuccessModal(true);
-        },
-        onError: () => {
-          if (isMounted.current) {
-            setIsUpdating(false);
-          }
-        },
-      },
-    );
-
-    if (!result && isMounted.current) {
+      // ─── Step 3: Success UI ───
+      if (!isMounted.current) return;
+      setIsEditMode(false);
       setIsUpdating(false);
+      setShowSuccessModal(true);
+    } catch (error: any) {
+      console.log('❌ handleSave error:', error.message);
+      if (isMounted.current) {
+        setIsUpdating(false);
+        Alert.alert(
+          'Update Failed',
+          error?.message || 'Failed to update profile. Please try again.',
+        );
+      }
     }
   };
 
@@ -838,9 +824,7 @@ export default function PartnerProfileScreen({ navigation }: Props) {
             <View style={styles.fieldContainer}>
               <View style={styles.labelRow}>
                 <Mail size={18} color="#71717A" strokeWidth={2.5} />
-                <Text style={[styles.label, { color: '#71717A' }]}>
-                  Email
-                </Text>
+                <Text style={[styles.label, { color: '#71717A' }]}>Email</Text>
               </View>
               <View style={styles.readOnlyInputContainer}>
                 <Lock size={16} color="#71717A" strokeWidth={2.5} />

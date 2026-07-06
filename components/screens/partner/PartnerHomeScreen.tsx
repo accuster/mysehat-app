@@ -64,6 +64,10 @@ import {
   logHealthMetrics,
 } from '../../../utils/healthMetricsCalculator';
 import { useToast } from '../../../contexts/ToastContext';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../../store';
+import { insertReport } from '../../../utils/localReportRepository';
+import { bmiReportSyncManager } from '../../../store/services/BmiReportSyncManager';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 
@@ -104,6 +108,7 @@ export default function PartnerHomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { showError } = useToast();
+  const partner = useSelector((state: RootState) => state.partnerAuth.partner);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // BLUETOOTH HOOK - Centralized management
@@ -353,20 +358,36 @@ export default function PartnerHomeScreen({ navigation }: Props) {
   };
 
   const handleModeSwitch = (newMode: Mode) => {
+    if (newMode === mode) return; // no-op on same tab
+
     setMode(newMode);
-    if (newMode === 'qr') {
-      setQrScanned(false);
-      setHeight('');
-      setWeight('');
-      setBmi('');
-      setIdealWeight('');
-      setBodyFatPercentage('');
-      setFatMass('');
-      setLeanBodyMass('');
-      setHealthScore('');
-      setFatPercentage('');
-    }
-    console.log('🔄 Mode switched to:', newMode, '- BT connection maintained');
+
+    // ✅ Symmetric clear — every tab switch resets captured data,
+    // regardless of direction. Manual entry (gender/age/name/mobile) is preserved.
+    setQrScanned(false);
+    setHeight('');
+    setWeight('');
+    setBmi('');
+    setIdealWeight('');
+    setBodyFatPercentage('');
+    setFatMass('');
+    setLeanBodyMass('');
+    setHealthScore('');
+    setFatPercentage('');
+
+    // Also flush the useBluetooth hook's cached last-data. Without this,
+    // if the kiosk pushed data before the switch, btLastData still holds
+    // it in memory — but since the [btLastData] useEffect only fires on
+    // *change*, cleared fields wouldn't re-populate anyway. Clearing the
+    // cache is belt-and-braces so any next kiosk push definitely triggers
+    // a fresh useEffect run.
+    clearBTData();
+
+    console.log(
+      '🔄 Mode switched to:',
+      newMode,
+      '(fields cleared, BT connection maintained)',
+    );
   };
 
   const handleQRScan = async () => {
@@ -440,6 +461,7 @@ export default function PartnerHomeScreen({ navigation }: Props) {
       if (!isMounted.current) return;
       setHeight(decryptedData.height.toString());
       setWeight(decryptedData.weight.toString());
+      setBmi(decryptedData.bmi.toString());
       setQrScanned(true);
 
       Alert.alert('Success', 'QR Code scanned successfully!');
@@ -573,6 +595,7 @@ export default function PartnerHomeScreen({ navigation }: Props) {
   };
 
   const handleSave = async () => {
+    // Validation (same as before)
     if (!height || !weight) {
       Alert.alert(
         'Error',
@@ -585,11 +608,19 @@ export default function PartnerHomeScreen({ navigation }: Props) {
       return;
     }
 
+    // ✅ NEW: partner must be authenticated — auth_id + org_id go into the
+    // local row so the sync manager knows which partner owns it.
+    if (!partner?.auth_id || !partner?.org_id) {
+      Alert.alert('Error', 'Partner session missing. Please log in again.');
+      return;
+    }
+
     try {
       const heightInCm = parseFloat(height);
       const weightInKg = parseFloat(weight);
       const ageNum = parseFloat(age);
 
+      // Compute display metrics (unchanged — used for Alert + Preview)
       const metrics = calculateHealthMetrics({
         height: heightInCm,
         weight: weightInKg,
@@ -602,46 +633,84 @@ export default function PartnerHomeScreen({ navigation }: Props) {
         metrics,
       );
 
-      const savedRecord = await saveBMIRecord({
-        height,
-        weight,
-        bmi: metrics.bmi.toString(),
-        bmiStatus: metrics.bmiStatus,
-        idealWeight: metrics.idealWeight.toString(),
-        bodyFatPercentage: metrics.bodyFatPercentage.toString(),
-        fatMass: metrics.fatMass.toString(),
-        leanBodyMass: metrics.leanBodyMass.toString(),
-        healthScore: metrics.healthScore.toString(),
+      // ✅ NEW: write to local SQLite (offline-first).
+      // insertReport() generates client_uuid on the phone — that UUID is
+      // the idempotency key the server uses to dedupe retries.
+      const savedRow = await insertReport({
+        // From the BMI kiosk (Bluetooth or QR)
+        height_cm: heightInCm,
+        weight_kg: weightInKg,
+        bmi: metrics.bmi,
+        bmi_status: metrics.bmiStatus,
+        fat_percent: metrics.bodyFatPercentage,
+
+        // Partner-entered
         gender,
-        age,
-        name,
+        age: ageNum,
+        patient_name: name,
         mobile,
-        dataSource: mode,
-        machineId: mode === 'qr' ? 'QR-SCAN' : currentDevice?.address,
-        timestamp: new Date().toISOString(),
+
+        // Context (partner_auth_id + org_id are also in the JWT — sent here
+        // for local lookups / debugging without decoding the token)
+        partner_auth_id: partner.auth_id,
+        org_id: partner.org_id,
+        bt_device_address:
+          mode === 'qr' ? null : currentDevice?.address ?? null,
+        bt_device_name: mode === 'qr' ? 'QR-SCAN' : currentDevice?.name ?? null,
       });
 
-      console.log('✅ Record saved:', savedRecord.id);
+      console.log('✅ Local row saved:', savedRow.client_uuid);
+
+      // ✅ NEW: fire immediate sync attempt.
+      // No-op if offline — the row stays 'pending' and the sync manager
+      // will catch it on the next trigger (net-online / foreground / 2-min).
+      bmiReportSyncManager.triggerNow();
+
       if (!isMounted.current) return;
+
       Alert.alert(
-        '✅ Report Saved Successfully',
-        `Record ID: ${savedRecord.id}\n\nPatient: ${name}\nBMI: ${metrics.bmi} (${metrics.bmiStatus})\nHealth Score: ${metrics.healthScore}/100\n\nWould you like to preview the report?`,
+        '✅ Report Saved',
+        `Patient: ${name}\n` +
+          `BMI: ${metrics.bmi} (${metrics.bmiStatus})\n` +
+          `Health Score: ${metrics.healthScore}/100\n\n` +
+          `If offline, it will sync automatically once connected.\n\n` +
+          `Preview the report?`,
         [
           {
             text: 'Cancel',
             style: 'cancel',
-            onPress: () => {
-              clearForm();
-            },
+            onPress: () => clearForm(),
           },
           {
             text: 'Preview Report',
             onPress: () => {
               try {
+                // Compat shape for the existing PartnerReportPreview screen.
+                // Combines persisted row + freshly computed display metrics.
+                // Once PartnerReportPreview reads directly from
+                // localReportRepository, this mapping goes away.
                 navigation.navigate('PartnerReportPreview', {
-                  record: savedRecord,
+                  record: {
+                    id: savedRow.client_uuid,
+                    height,
+                    weight,
+                    bmi: metrics.bmi.toString(),
+                    bmiStatus: metrics.bmiStatus,
+                    idealWeight: metrics.idealWeight.toString(),
+                    bodyFatPercentage: metrics.bodyFatPercentage.toString(),
+                    fatMass: metrics.fatMass.toString(),
+                    leanBodyMass: metrics.leanBodyMass.toString(),
+                    healthScore: metrics.healthScore.toString(),
+                    gender,
+                    age,
+                    name,
+                    mobile,
+                    dataSource: mode,
+                    machineId:
+                      mode === 'qr' ? 'QR-SCAN' : currentDevice?.address,
+                    timestamp: new Date(savedRow.created_at).toISOString(),
+                  },
                 });
-
                 clearForm();
               } catch (error) {
                 console.log('❌ Navigation error:', error);
