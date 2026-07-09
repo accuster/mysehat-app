@@ -581,17 +581,7 @@ export default function PartnerHomeScreen({ navigation }: Props) {
 
   // ✅ NEW: Handle Search Button Click
   const handleSearchClick = () => {
-    Alert.alert('Search Records', 'Search for saved BMI records', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Open Search',
-        onPress: () => {
-          // TODO: Navigate to search screen or open search modal
-          console.log('🔍 Opening search...');
-          // navigation.navigate('PartnerSearch');
-        },
-      },
-    ]);
+    navigation.navigate('PartnerSearch');
   };
 
   const handleSave = async () => {

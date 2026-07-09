@@ -25,6 +25,7 @@ import PartnerReportsScreen from '../screens/partner/PartnerReportsScreen';
 import PartnerProfileScreen from '../screens/partner/PartnerProfileScreen';
 import BMIRecordsScreen from '../screens/partner/BMIRecordsScreen';
 import PartnerReportPreview from '../screens/partner/PartnerReportPreview';
+import PartnerSearchScreen from '../screens/partner/PartnerSearchScreen';
 
 import BottomTabNavigator from './BottomTabNavigator';
 
@@ -52,6 +53,7 @@ export type AppStackParamList = {
   PartnerTransactions: undefined;
   PartnerProfile: undefined;
   PartnerReports: undefined;
+  PartnerSearch: undefined;
   BMIRecords: undefined;
   PartnerReportPreview: {
     record: any;
@@ -131,20 +133,28 @@ function AppStackNavigator() {
       />
 
       <AppStack.Screen name="ReportsStack" component={ReportsScreen} />
-      <AppStack.Screen name="TransactionsStack" component={TransactionsScreen} />
+      <AppStack.Screen
+        name="TransactionsStack"
+        component={TransactionsScreen}
+      />
       <AppStack.Screen name="WalletStack" component={WalletScreen} />
       <AppStack.Screen name="RechargeStack" component={RechargeScreen} />
       <AppStack.Screen name="PartnerHome" component={PartnerHomeScreen} />
-      <AppStack.Screen name="PartnerTransactions" component={PartnerTransactionsScreen} />
+      <AppStack.Screen
+        name="PartnerTransactions"
+        component={PartnerTransactionsScreen}
+      />
       <AppStack.Screen name="Support" component={SupportScreen} />
       <AppStack.Screen name="Profile" component={ProfileScreen} />
       <AppStack.Screen name="ManageMembers" component={ManageMembersScreen} />
       <AppStack.Screen name="PartnerProfile" component={PartnerProfileScreen} />
       <AppStack.Screen name="PartnerReports" component={PartnerReportsScreen} />
-      
+      <AppStack.Screen name="PartnerSearch" component={PartnerSearchScreen} />
       <AppStack.Screen name="BMIRecords" component={BMIRecordsScreen} />
-      <AppStack.Screen name="PartnerReportPreview" component={PartnerReportPreview} />
-
+      <AppStack.Screen
+        name="PartnerReportPreview"
+        component={PartnerReportPreview}
+      />
       <AppStack.Screen
         name="SelectUser"
         component={SelectUserContainer}

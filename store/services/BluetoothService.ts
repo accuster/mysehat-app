@@ -57,6 +57,7 @@ export type BTAckCallback = (ack: string) => void; // ✅ NEW: For recharge ACK
 
 const XOR_KEY = 0x5a;
 const RECHARGE_CMD = 'R';
+const CMD_TERMINATOR = '\n';
 const MAX_CREDIT = 50_000;
 const ACK_TIMEOUT_MS = 50_000;
 
@@ -718,11 +719,13 @@ class BluetoothService {
         throw new Error('Device not connected');
       }
 
-      console.log('💰 Sending recharge command: "R"');
-      await this.currentDevice.write(RECHARGE_CMD);
+      console.log('💰 Sending recharge command: "R\\n"');
+      await RNBluetoothClassic.writeToDevice(
+        this.currentDevice.address,
+        RECHARGE_CMD + CMD_TERMINATOR, // ← "R\n" instead of just "R"
+      );
       console.log('✅ Recharge command sent');
 
-      // Switch to recharge mode to handle ACK
       this.setRechargeMode();
     } catch (error: any) {
       console.log('❌ Send recharge command error:', error);
@@ -750,26 +753,26 @@ class BluetoothService {
   // }
 
   /**
- * Encrypt amount using XOR + HEX encoding
- * Format expected by kiosk firmware: XOR each char with 0x5A, then HEX-encode the bytes
- * Example: 50 → '5'^0x5A='o'(0x6F), '0'^0x5A='j'(0x6A) → "6F6A"
- */
-public encryptAmount(amount: number): string {
-  if (amount <= 0 || amount > MAX_CREDIT) {
-    throw new Error(`Amount must be between 1 and ${MAX_CREDIT}`);
+   * Encrypt amount using XOR + HEX encoding
+   * Format expected by kiosk firmware: XOR each char with 0x5A, then HEX-encode the bytes
+   * Example: 50 → '5'^0x5A='o'(0x6F), '0'^0x5A='j'(0x6A) → "6F6A"
+   */
+  public encryptAmount(amount: number): string {
+    if (amount <= 0 || amount > MAX_CREDIT) {
+      throw new Error(`Amount must be between 1 and ${MAX_CREDIT}`);
+    }
+
+    const plain = amount.toString();
+    let hex = '';
+
+    for (let i = 0; i < plain.length; i++) {
+      const xored = plain.charCodeAt(i) ^ XOR_KEY;
+      hex += xored.toString(16).padStart(2, '0').toUpperCase();
+    }
+
+    console.log(`🔐 Encrypted ${amount} → "${hex}" (${hex.length} chars)`);
+    return hex;
   }
-
-  const plain = amount.toString();
-  let hex = '';
-
-  for (let i = 0; i < plain.length; i++) {
-    const xored = plain.charCodeAt(i) ^ XOR_KEY;
-    hex += xored.toString(16).padStart(2, '0').toUpperCase();
-  }
-
-  console.log(`🔐 Encrypted ${amount} → "${hex}" (${hex.length} chars)`);
-  return hex;
-}
 
   /**
    * Decrypt ACK from kiosk (HEX string)
@@ -806,46 +809,100 @@ public encryptAmount(amount: number): string {
   /**
    * Send encrypted amount and wait for ACK
    */
-  public async sendEncryptedAmount(amount: number): Promise<number> {
-    if (!this.currentDevice) {
-      throw new Error('No device connected');
+  // public async sendEncryptedAmount(amount: number): Promise<number> {
+  //   if (!this.currentDevice) {
+  //     throw new Error('No device connected');
+  //   }
+
+  //   try {
+  //     const isConnected = await this.currentDevice.isConnected();
+  //     if (!isConnected) {
+  //       throw new Error('Device not connected');
+  //     }
+
+  //     // Encrypt the amount
+  //     const encrypted = this.encryptAmount(amount);
+
+  //     console.log(`💰 Sending encrypted amount: ${amount}`);
+
+  //     // Switch to recharge mode for ACK handling
+  //     this.setRechargeMode();
+
+  //     // Send encrypted data
+  //     await this.currentDevice.write(encrypted);
+  //     console.log('✅ Encrypted amount sent, waiting for ACK...');
+
+  //     // Wait for ACK
+  //     const ackData = await this.waitForAck();
+
+  //     // Decrypt ACK
+  //     const confirmedAmount = this.decryptAck(ackData);
+  //     console.log(`✅ ACK confirmed amount: ${confirmedAmount}`);
+
+  //     // Switch back to BMI mode
+  //     this.setBMIMode();
+
+  //     return confirmedAmount;
+  //   } catch (error: any) {
+  //     // Switch back to BMI mode on error
+  //     this.setBMIMode();
+
+  //     console.log('❌ Send encrypted amount error:', error);
+  //     throw error;
+  //   }
+  // }
+
+  async sendEncryptedAmount(amount: number): Promise<number> {
+    if (!Number.isInteger(amount) || amount < 1 || amount > MAX_CREDIT) {
+      throw new Error(`Invalid amount: ${amount}`);
+    }
+    if (!this.currentDevice || !this.isConnected) {
+      throw new Error('Not connected to kiosk');
     }
 
+    // ✅ CORRECT: send RAW XOR bytes (not hex-encoded).
+    // Firmware decrypt_value() does character-by-character XOR
+    // and expects the result to be ASCII digits.
+    //
+    // Example: 10 → "10" → XOR each char → "kj" (bytes 0x6B, 0x6A)
+    // NOT "6B6A" — that would be hex encoding and firmware rejects it.
+    const asciiAmount = amount.toString();
+    const rawXor = Array.from(asciiAmount)
+      .map(ch => String.fromCharCode(ch.charCodeAt(0) ^ XOR_KEY))
+      .join('');
+
+    // Nice log so you can see both the raw string and its hex representation
+    const hexPreview = Array.from(rawXor)
+      .map(c => c.charCodeAt(0).toString(16).padStart(2, '0').toUpperCase())
+      .join(' ');
+    console.log(
+      `🔐 Encrypted ${amount} → raw "${rawXor}" (bytes: ${hexPreview})`,
+    );
+
+    this.setRechargeMode();
+    const ackPromise = this.waitForAck();
+
     try {
-      const isConnected = await this.currentDevice.isConnected();
-      if (!isConnected) {
-        throw new Error('Device not connected');
-      }
-
-      // Encrypt the amount
-      const encrypted = this.encryptAmount(amount);
-
-      console.log(`💰 Sending encrypted amount: ${amount}`);
-
-      // Switch to recharge mode for ACK handling
-      this.setRechargeMode();
-
-      // Send encrypted data
-      await this.currentDevice.write(encrypted);
-      console.log('✅ Encrypted amount sent, waiting for ACK...');
-
-      // Wait for ACK
-      const ackData = await this.waitForAck();
-
-      // Decrypt ACK
-      const confirmedAmount = this.decryptAck(ackData);
-      console.log(`✅ ACK confirmed amount: ${confirmedAmount}`);
-
-      // Switch back to BMI mode
+      // writeToDevice sends the string as bytes. Our XOR'd result for
+      // digits 0-9 always lands in the lowercase-letter range (a-o),
+      // so plain string encoding works.
+      await RNBluetoothClassic.writeToDevice(
+        this.currentDevice.address,
+        rawXor + CMD_TERMINATOR,
+      );
+    } catch (err: any) {
       this.setBMIMode();
+      throw new Error(`Write failed: ${err?.message ?? err}`);
+    }
 
-      return confirmedAmount;
-    } catch (error: any) {
-      // Switch back to BMI mode on error
+    console.log('⏳ Waiting for ACK...');
+    try {
+      const ackHex = await ackPromise; // string like "6B6A"
+      const confirmed = this.decryptAck(ackHex); // decrypt → number like 10
+      console.log(`✅ ACK received: "${ackHex}" → ${confirmed}`);
+      return confirmed;
+    } finally {
       this.setBMIMode();
-
-      console.log('❌ Send encrypted amount error:', error);
-      throw error;
     }
   }
 

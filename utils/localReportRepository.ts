@@ -46,6 +46,9 @@ export interface ReportCounts {
   total: number;
 }
 
+// ─── Public: types ─────────────────────────────────────────────────────────
+export type BmiStatusFilter = 'Underweight' | 'Normal' | 'Overweight' | 'Obese';
+
 // ─── Internal: row mapper ──────────────────────────────────────────────────
 
 /**
@@ -386,4 +389,117 @@ export async function deleteSyncedOlderThan(
     console.log(`🧹 deleteSyncedOlderThan: removed ${count} row(s)`);
   }
   return count;
+}
+
+export interface SearchReportsInput {
+  partnerAuthId: string;
+
+  /** Free-text query — matches patient_name OR mobile (case-insensitive, partial). */
+  query?: string;
+
+  /** Unix millis. Inclusive lower bound on created_at. */
+  fromDate?: number | null;
+
+  /** Unix millis. Inclusive upper bound on created_at. */
+  toDate?: number | null;
+
+  /** Filter to specific BMI status values (empty/undefined = no filter). */
+  bmiStatuses?: BmiStatusFilter[];
+
+  /** Page size. Default 20. Cap 100 to prevent runaway queries. */
+  limit?: number;
+
+  /** Offset for pagination. Default 0. */
+  offset?: number;
+}
+
+export interface SearchReportsResult {
+  rows: BmiReportRow[];
+  /** Total matching rows ignoring limit/offset — for "showing X of Y" UI. */
+  totalCount: number;
+}
+
+/**
+ * Search reports owned by this partner with optional filters.
+ * All predicates are AND-combined; a partner sees ONLY their own rows.
+ *
+ * Query behavior:
+ *   - Trims whitespace; empty query = no text filter.
+ *   - Matches patient_name OR mobile with case-insensitive LIKE.
+ *   - `%` in query is escaped to prevent user-injected wildcards.
+ *
+ * Ordering: newest first (created_at DESC) so recent scans surface at top.
+ *
+ * NOTE: This is local-only. When the server /partner/reports/search endpoint
+ * exists, PartnerSearchScreen will try server first and fall back to this
+ * function on network failure. No changes needed here.
+ */
+export async function searchReports(
+  input: SearchReportsInput,
+): Promise<SearchReportsResult> {
+  const db = getDb();
+  const limit = Math.min(Math.max(input.limit ?? 20, 1), 100);
+  const offset = Math.max(input.offset ?? 0, 0);
+
+  const where: string[] = ['partner_auth_id = ?'];
+  const params: any[] = [input.partnerAuthId];
+
+  // Text filter — matches name OR mobile
+  const q = input.query?.trim() ?? '';
+  if (q.length > 0) {
+    // Escape SQL LIKE metacharacters so user typing "50%" doesn't wildcard-match.
+    const escaped = q.replace(/[\\%_]/g, ch => '\\' + ch);
+    const like = `%${escaped}%`;
+    where.push(
+      "(LOWER(patient_name) LIKE LOWER(?) ESCAPE '\\' OR mobile LIKE ? ESCAPE '\\')",
+    );
+    params.push(like, like);
+  }
+
+  // Date range
+  if (input.fromDate != null) {
+    where.push('created_at >= ?');
+    params.push(input.fromDate);
+  }
+  if (input.toDate != null) {
+    where.push('created_at <= ?');
+    params.push(input.toDate);
+  }
+
+  // BMI status IN (…)
+  const statuses = input.bmiStatuses ?? [];
+  if (statuses.length > 0) {
+    const placeholders = statuses.map(() => '?').join(', ');
+    where.push(`bmi_status IN (${placeholders})`);
+    params.push(...statuses);
+  }
+
+  const whereSql = where.join(' AND ');
+
+  // Two queries: page of rows + total count. Kept in sequence rather
+  // than a single window-function query so the query planner stays simple.
+  const pageResult = await db.execute(
+    `SELECT * FROM ${TABLE_BMI_REPORTS}
+       WHERE ${whereSql}
+       ORDER BY created_at DESC
+       LIMIT ? OFFSET ?`,
+    [...params, limit, offset],
+  );
+
+  const countResult = await db.execute(
+    `SELECT COUNT(*) AS total FROM ${TABLE_BMI_REPORTS}
+       WHERE ${whereSql}`,
+    params,
+  );
+
+  const rows = (pageResult.rows ?? []).map(rowToBmiReport);
+  const totalCount = Number((countResult.rows?.[0] as any)?.total ?? 0);
+
+  console.log(
+    `🔍 searchReports: q="${q}" statuses=[${statuses.join(',')}] ` +
+      `from=${input.fromDate ?? '-'} to=${input.toDate ?? '-'} ` +
+      `→ ${rows.length}/${totalCount} rows`,
+  );
+
+  return { rows, totalCount };
 }
