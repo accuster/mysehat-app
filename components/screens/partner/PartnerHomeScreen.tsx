@@ -221,7 +221,9 @@ export default function PartnerHomeScreen({ navigation }: Props) {
     };
   }, []);
 
-  // ✅ Auto-fill from Bluetooth data
+  // ✅ Auto-fill from Bluetooth data (Height + Weight only)
+  // BMI, ideal weight, fat %, health score all calculated app-side
+  // in the useEffect below and in calculateMetrics().
   useEffect(() => {
     if (btLastData.height) {
       console.log('📏 Auto-filling height from BT:', btLastData.height);
@@ -231,15 +233,39 @@ export default function PartnerHomeScreen({ navigation }: Props) {
       console.log('⚖️ Auto-filling weight from BT:', btLastData.weight);
       setWeight(btLastData.weight.toString());
     }
-    if (btLastData.bmi) {
-      console.log('📊 Auto-filling BMI from BT:', btLastData.bmi);
-      setBmi(btLastData.bmi.toString());
-
-      // ✅ Calculate BMI Status from received BMI
-      const bmiStatus = getBMIStatus(btLastData.bmi.toString());
-      console.log('📈 BMI Status:', bmiStatus);
-    }
   }, [btLastData]);
+
+  // ✅ Auto-calculate BMI + Ideal Weight the moment we have Height and Weight.
+  // BMI formula doesn't need age or gender — compute it directly here.
+  // Advanced metrics (fat %, health score) DO need age; they're handled in
+  // the [age, height, weight, bmi, gender] effect below when age is entered.
+  useEffect(() => {
+    const h = parseFloat(height);
+    const w = parseFloat(weight);
+    if (!h || !w || h <= 0 || w <= 0) return;
+
+    // BMI = weight(kg) / (height(m))². Same formula the kiosk uses,
+    // so results will match the kiosk's B.M.I. value.
+    const heightM = h / 100;
+    const bmiCalc = w / (heightM * heightM);
+    const bmiRounded = Math.round(bmiCalc * 10) / 10; // 1 decimal
+
+    setBmi(bmiRounded.toString());
+
+    // Ideal weight range using BMI 18.5 – 24.9 bracket.
+    // Displayed as a single midpoint number to fit the existing UI.
+    const idealLow = 18.5 * heightM * heightM;
+    const idealHigh = 24.9 * heightM * heightM;
+    const idealMid = Math.round(((idealLow + idealHigh) / 2) * 10) / 10;
+    setIdealWeight(idealMid.toString());
+
+    console.log(
+      '📊 App-calculated BMI:',
+      bmiRounded,
+      '| Ideal Weight (mid):',
+      idealMid,
+    );
+  }, [height, weight]);
 
   // Re-check camera permission when app becomes active
   useEffect(() => {

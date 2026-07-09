@@ -34,7 +34,6 @@ export type BTMode = 'bmi' | 'recharge'; // ✅ NEW: Operation mode
 export interface BTData {
   height?: number;
   weight?: number;
-  bmi?: number;
   timestamp: number;
 }
 
@@ -510,48 +509,60 @@ class BluetoothService {
 
       try {
         const dataStr = (data.data || data).toString();
+        if (!dataStr) return; // ignore empty frames, no noise in logs
         console.log('📊 Parsed data string:', dataStr);
         console.log('🎯 Current mode:', this.currentMode);
 
         // ═══════════════════════════════════════════════════════════════════
-        // RECHARGE MODE - Handle ACK
-        // ═══════════════════════════════════════════════════════════════════
-        if (this.currentMode === 'recharge') {
-          console.log('💰 Handling as recharge ACK');
-          this.handleAckData(dataStr);
-          return; // Don't process as BMI data
-        }
-
-        // ═══════════════════════════════════════════════════════════════════
         // BMI MODE - Parse health data
+        //
+        // IMPORTANT: We ONLY extract Height and Weight from the kiosk.
+        // Everything else (BMI, ideal weight, fat %, health score) is
+        // calculated app-side in healthMetricsCalculator.ts. This makes us
+        // robust to firmware variations:
+        //   - Old kiosks send "HEIGHT=", "WEIGHT=", "BODY MASS INDEX="
+        //   - Newer kiosks send "Height=", "Weight=", "B.M.I.=", plus
+        //     extra lines like "Ideal Weight = 26.0kg - 32.9kg" that used
+        //     to falsely match our Weight regex.
+        //
+        // Rules:
+        //   - Height/Weight labels must be at start-of-string (^) or after a
+        //     whitespace/newline (\s) — never mid-word. This prevents
+        //     "Ideal Weight = 26" from being read as Weight = 26.
+        //   - Case-insensitive to handle both HEIGHT and Height.
         // ═══════════════════════════════════════════════════════════════════
         const receivedData: BTData = {
           timestamp: Date.now(),
         };
 
-        // Parse HEIGHT
-        const heightMatch = dataStr.match(/HEIGHT[=\s]*(\d+\.?\d*)\s*cm/i);
+        // Parse HEIGHT — but skip frames containing "Ideal Height" (future-proof).
+        // Each BT frame is parsed independently, so a simple guard is enough.
+        const isIdealHeightFrame = /Ideal\s+Height/i.test(dataStr);
+        const heightMatch =
+          !isIdealHeightFrame &&
+          dataStr.match(/Height\s*[=:]\s*(\d+\.?\d*)\s*cm/i);
         if (heightMatch && heightMatch[1]) {
           receivedData.height = parseFloat(heightMatch[1]);
           console.log('📏 Height:', receivedData.height, 'cm');
         }
 
-        // Parse WEIGHT
-        const weightMatch = dataStr.match(/WEIGHT[=\s]*(\d+\.?\d*)\s*Kg/i);
+        // Parse WEIGHT — but reject frames containing "Ideal Weight" like
+        // "  Ideal Weight = 26.0kg - 32.9kg" which would otherwise be
+        // mistaken for a real Weight reading and overwrite the correct one.
+        const isIdealWeightFrame = /Ideal\s+Weight/i.test(dataStr);
+        const weightMatch =
+          !isIdealWeightFrame &&
+          dataStr.match(/Weight\s*[=:]\s*(\d+\.?\d*)\s*(?:kg|Kg)/i);
         if (weightMatch && weightMatch[1]) {
           receivedData.weight = parseFloat(weightMatch[1]);
           console.log('⚖️ Weight:', receivedData.weight, 'kg');
         }
 
-        // Parse BMI
-        const bmiMatch = dataStr.match(/BODY\s*MASS\s*INDEX[=\s]*(\d+\.?\d*)/i);
-        if (bmiMatch && bmiMatch[1]) {
-          receivedData.bmi = parseFloat(bmiMatch[1]);
-          console.log('📊 BMI:', receivedData.bmi);
-        }
+        // BMI, RESULT, Ideal Weight etc. are intentionally NOT parsed here.
+        // The app calculates them from Height + Weight in healthMetricsCalculator.
 
         // If we got valid data, cache it and notify listeners
-        if (receivedData.height || receivedData.weight || receivedData.bmi) {
+        if (receivedData.height || receivedData.weight) {
           this.lastData = receivedData;
           this.notifyData(receivedData);
         }
